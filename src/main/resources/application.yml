@@ -1,0 +1,26 @@
+# Shared defaults across ALL environments.
+# Environment-specific overrides live in application-{profile}.yml
+# (e.g. application-dev.yml) and are activated via the SPRING_PROFILES_ACTIVE
+# environment variable at deploy time — see "Environment Configuration
+# Pattern" in CLAUDE.md.
+
+spring:
+  application:
+    name: platform-backend
+
+  # MongoDB connection details are environment-specific and intentionally
+  # NOT set here — see application-dev.yml. Never put a real connection
+  # string or credential in this shared file, since it is loaded in every
+  # environment including production.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only expose the health endpoint by default. Do not widen this to
+        # "*" without deliberately deciding what's safe to expose in
+        # non-dev environments.
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized

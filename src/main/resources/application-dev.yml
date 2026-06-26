@@ -1,0 +1,18 @@
+# Development environment overrides.
+# Activated via: SPRING_PROFILES_ACTIVE=dev
+
+spring:
+  data:
+    mongodb:
+      # PLACEHOLDER — replace once the dev MongoDB Atlas cluster exists
+      # (see CLAUDE.md build order: MongoDB connection comes after this
+      # skeleton boots successfully). Never commit a real connection
+      # string with embedded credentials — once a real cluster exists,
+      # this should reference an environment variable instead, e.g.:
+      #   uri: ${MONGODB_URI}
+      uri: mongodb://localhost:27017/htmadvisory_dev
+
+management:
+  endpoint:
+    health:
+      show-details: always
