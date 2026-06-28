@@ -44,18 +44,34 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
       (Java 21 pinned, `run-dev.sh` wrapper)
 - [x] Local dev MongoDB running in Docker, app verified connected under the
       `dev` profile (port 27018 — see "Local MongoDB" below)
-- [x] **Liquibase dependencies correctly added to `pom.xml`** (fixed a real
+- [x] Liquibase dependencies correctly added to `pom.xml` (fixed a real
       structural bug — see "Liquibase + MongoDB" below)
-- [x] **Liquibase running successfully against MongoDB via a manual runner**
-      — `people` and `engagements` collections created, both indexes
-      verified correct (`idx_people_email_unique` unique on `email`,
+- [x] Liquibase running successfully against MongoDB via a manual runner —
+      `people` and `engagements` collections created, both indexes verified
+      correct (`idx_people_email_unique` unique on `email`,
       `idx_engagements_personid` on `personId`)
+- [x] **`people` domain Java code written and verified:** `Person` and
+      `Engagement` models (`@Document`-mapped to the collections above),
+      `PersonRepository` and `EngagementRepository` (Spring Data
+      auto-implemented — confirmed via startup log:
+      `Found 2 MongoDB repository interfaces`), `PersonService` with
+      `findOrCreateByEmail()` and `recordEngagement()` — the two methods
+      every future domain (contact, survey, news) will call rather than
+      inventing their own identity logic
+- [ ] **Automated test proving `findOrCreateByEmail()` actually works
+      against real data** — the code compiles and the app boots, but no
+      test has yet exercised it (e.g. create a person, fetch the same email
+      again, confirm it's the same id, not a duplicate). This is the
+      immediate next step, before building on top of `people` further.
 - [ ] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
       MongoDB above; not yet provisioned)
 - [ ] Testing harness (Testcontainers, JUnit5/Mockito/AssertJ, PIT, Cucumber)
-- [ ] `Person` and `Engagement` Java model classes (next immediate step —
-      collections/indexes exist, but no Java code defines their shape yet)
-- [ ] `people` domain service layer (`PersonService.findOrCreateByEmail()`, etc.)
+      — NOT yet set up; the `people` code above was written and manually
+      verified via app boot + log inspection, not via automated tests. Per
+      CLAUDE.md's Automated Testing Strategy, the testing harness was
+      supposed to exist BEFORE this domain code — it does not yet. Treat
+      this as a known gap to close before writing `contact`, not a precedent
+      to repeat.
 - [ ] `profile`, `consent`, `traffic` domains built
 - [ ] `contact` domain + first endpoint (`POST /api/contacts/inquiries`)
 - [ ] Terraform module + `htmadvisory-dev` GCP project created from code
@@ -116,6 +132,7 @@ the PORTS column.
 ```bash
 docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.getCollectionNames()"
 docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.people.getIndexes()"
+docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.people.find().pretty()"
 ```
 
 ### Liquibase + MongoDB — READ BEFORE TOUCHING ANY CHANGESET OR LIQUIBASE CONFIG
@@ -181,6 +198,33 @@ Per the main CLAUDE.md's Liquibase Changeset Ordering: `profiles`,
 `consent_records`, and `visits` collections/indexes come next, BEFORE
 `contacts` — do not reorder.
 
+## The `people` Domain — Current Code
+
+```
+src/main/java/org/htmadvisory/platform/people/
+├── Person.java               # @Document(collection = "people")
+├── Engagement.java            # @Document(collection = "engagements")
+├── PersonRepository.java      # Spring Data auto-implemented; findByEmail()
+├── EngagementRepository.java  # Spring Data auto-implemented; findByPersonId()
+└── PersonService.java         # findOrCreateByEmail(), recordEngagement()
+```
+
+**How every future domain should use this** (not yet exercised by real
+calling code — `contact` will be the first):
+```java
+Person person = personService.findOrCreateByEmail(email, name);
+personService.recordEngagement(person.getId(), "contact", "inquiry_submitted", metadata);
+```
+
+**Verified so far:** the app boots with these classes present, Spring Data
+correctly discovers both repositories (`Found 2 MongoDB repository
+interfaces` in the startup log). **NOT yet verified:** that
+`findOrCreateByEmail()` actually behaves correctly against real data — e.g.
+that calling it twice with the same email returns the same `Person` rather
+than creating a duplicate (which the unique index would actually catch and
+throw on, but this has not been deliberately tested). Write this test before
+proceeding to `contact`.
+
 ### Running the app
 
 ```bash
@@ -207,13 +251,17 @@ the Docker container is running first.
 ### Common gotcha: port 8080 already in use
 
 If `spring-boot:run` fails with `Port 8080 was already in use`, a previous
-run of this same app is probably still alive in another terminal tab (this
-has happened multiple times — `Ctrl+C` does not always reliably kill the
-forked Maven/Spring Boot process). Find and kill it:
+run of this same app is probably still alive in another terminal tab. This
+has happened repeatedly. Find and kill it:
 ```bash
 lsof -i :8080
 kill <PID shown above>
 ```
+**If a plain `kill` does not actually stop the process (verify with `lsof -i
+:8080` again — the PID may still show up), use `kill -9 <PID>` instead.**
+This has been necessary at least once already — a regular SIGTERM is not
+always sufficient.
+
 **Check this FIRST whenever a run fails immediately with no other obvious
 cause** — it's been the actual root cause more than once already.
 
@@ -237,3 +285,11 @@ cause** — it's been the actual root cause more than once already.
   verify with `./run-dev.sh dependency:tree | grep -i <artifact>` after
   adding a new dependency — a clean `dependency:resolve` is NOT sufficient
   proof a dependency actually made it into the build.
+- **Testing harness gap (flagged 2026-06-27):** the `people` domain code was
+  written and manually verified (boot logs, manual `mongosh` inspection)
+  rather than via the Testcontainers/JUnit5/Mockito/AssertJ harness that
+  CLAUDE.md's build order says should exist BEFORE domain code. This was a
+  sequencing deviation, not a policy change — set up the real testing
+  harness next, write a test that exercises `findOrCreateByEmail()` and
+  `recordEngagement()` against a real Testcontainers MongoDB instance, and
+  do not repeat this shortcut for `contact` or any later domain.
