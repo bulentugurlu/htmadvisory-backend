@@ -18,8 +18,11 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
 - **Database:** MongoDB (via Spring Data MongoDB)
 - **Schema management:** Liquibase + liquibase-mongodb — **run MANUALLY, NOT
   via Spring Boot's spring.liquibase.* auto-configuration** (see "Liquibase
-  + MongoDB" section below — this is a real, non-obvious gap and the fix is
-  load-bearing for the rest of this codebase)
+  + MongoDB" section below)
+- **Testing:** JUnit5/Mockito/AssertJ + Testcontainers (real MongoDB per
+  test run) — **see "Testcontainers + Docker Desktop" section below before
+  running tests for the first time on a new machine, or if tests suddenly
+  fail with Docker-connection errors**
 - **Build:** Maven
 
 ## Architecture Convention (summary — see main CLAUDE.md for full detail)
@@ -29,13 +32,13 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   technical layer. Endpoints are named for what the caller is doing
   (`POST /api/contacts/inquiries`), not for the database table touched.
 - **`shared/` is cross-cutting only** — the environment-token interceptor,
-  common exception handling, AND the `MongoLiquibaseRunner` (see below).
-  Never a dumping ground.
+  common exception handling, the `MongoLiquibaseRunner`, AND
+  `AbstractMongoIntegrationTest` (see below). Never a dumping ground.
 - **Build order: `people`/`profile`/`consent`/`traffic` (foundational
   identity/marketing domains) FIRST, then `contact`** (first domain-specific
   capability: `POST /api/contacts/inquiries`).
 
-## Current Status (updated 2026-06-27)
+## Current Status (updated 2026-06-28)
 
 - [x] Repo created
 - [x] Maven + Spring Boot skeleton
@@ -44,34 +47,29 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
       (Java 21 pinned, `run-dev.sh` wrapper)
 - [x] Local dev MongoDB running in Docker, app verified connected under the
       `dev` profile (port 27018 — see "Local MongoDB" below)
-- [x] Liquibase dependencies correctly added to `pom.xml` (fixed a real
-      structural bug — see "Liquibase + MongoDB" below)
+- [x] Liquibase dependencies correctly added to `pom.xml`
 - [x] Liquibase running successfully against MongoDB via a manual runner —
       `people` and `engagements` collections created, both indexes verified
-      correct (`idx_people_email_unique` unique on `email`,
-      `idx_engagements_personid` on `personId`)
-- [x] **`people` domain Java code written and verified:** `Person` and
-      `Engagement` models (`@Document`-mapped to the collections above),
-      `PersonRepository` and `EngagementRepository` (Spring Data
-      auto-implemented — confirmed via startup log:
-      `Found 2 MongoDB repository interfaces`), `PersonService` with
-      `findOrCreateByEmail()` and `recordEngagement()` — the two methods
-      every future domain (contact, survey, news) will call rather than
-      inventing their own identity logic
-- [ ] **Automated test proving `findOrCreateByEmail()` actually works
-      against real data** — the code compiles and the app boots, but no
-      test has yet exercised it (e.g. create a person, fetch the same email
-      again, confirm it's the same id, not a duplicate). This is the
-      immediate next step, before building on top of `people` further.
+      correct
+- [x] `people` domain Java code written: `Person`, `Engagement`,
+      `PersonRepository`, `EngagementRepository`, `PersonService` with
+      `findOrCreateByEmail()` and `recordEngagement()`
+- [x] **Testing harness fully working and proven:** `AbstractMongoIntegrationTest`
+      (Testcontainers base class), `PersonTestDataBuilder`, and
+      `PersonServiceIntegrationTest` (5 tests) — **all 5 passing**, run
+      against a real, throwaway MongoDB container with Liquibase changesets
+      applied automatically, exactly mirroring the real dev/prod schema
+      path. This closes the testing-harness sequencing gap flagged on
+      2026-06-27.
+- [x] **Major Docker/Testcontainers compatibility issue diagnosed and fixed**
+      — see "Testcontainers + Docker Desktop" section below. This took a
+      genuinely long debugging session; the fix is now permanent and
+      machine-level, should never need rediscovering.
 - [ ] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
       MongoDB above; not yet provisioned)
-- [ ] Testing harness (Testcontainers, JUnit5/Mockito/AssertJ, PIT, Cucumber)
-      — NOT yet set up; the `people` code above was written and manually
-      verified via app boot + log inspection, not via automated tests. Per
-      CLAUDE.md's Automated Testing Strategy, the testing harness was
-      supposed to exist BEFORE this domain code — it does not yet. Treat
-      this as a known gap to close before writing `contact`, not a precedent
-      to repeat.
+- [ ] PIT mutation testing configured (part of the full testing strategy in
+      the main CLAUDE.md, not yet set up in this repo)
+- [ ] Cucumber configured (same — not yet set up)
 - [ ] `profile`, `consent`, `traffic` domains built
 - [ ] `contact` domain + first endpoint (`POST /api/contacts/inquiries`)
 - [ ] Terraform module + `htmadvisory-dev` GCP project created from code
@@ -97,7 +95,99 @@ in this repo:
 
 ```bash
 ./run-dev.sh spring-boot:run -Dspring-boot.run.profiles=dev
+./run-dev.sh test
 ```
+
+### Testcontainers + Docker Desktop — READ THIS BEFORE RUNNING TESTS ON A NEW MACHINE
+
+**This machine's Docker Desktop (Docker Engine 29.5.2) was initially
+completely incompatible with Testcontainers, and the failure mode was
+genuinely confusing — it looked like a socket/path problem but was actually
+a library-version problem. Two fixes were required TOGETHER; do not assume
+either one alone is sufficient.**
+
+**Symptom (if this regresses):** every test extending `AbstractMongoIntegrationTest`
+fails immediately with:
+```
+java.lang.IllegalStateException: Could not find a valid Docker environment.
+...
+BadRequestException (Status 400: {"ID":"","Containers":0,...,"ServerVersion":"",...})
+```
+The telltale sign this is THIS specific issue (not Docker actually being
+down): the JSON in the error is a fully-formed but completely BLANK info
+object — every field present but empty (`""`, `0`, `null`). A real
+Docker-is-down error looks different (connection refused, no response at
+all). A blank-but-well-formed response means Docker received the request
+and rejected it at the API layer — which is exactly what an unsupported API
+version negotiation looks like.
+
+**What did NOT fix it (ruled out, in this order, do not waste time
+re-trying these):**
+1. Different `docker.host` socket paths in `~/.testcontainers.properties`
+   (tried `/Users/<user>/.docker/run/docker.sock`,
+   `/Users/<user>/Library/Containers/com.docker.docker/Data/docker-cli.sock`
+   — both are real, valid sockets, confirmed via direct `curl
+   --unix-socket ... http://localhost/info`, which returned fully populated
+   real responses both times)
+2. `DOCKER_HOST` environment variable pointing at the same sockets
+3. Restarting Docker Desktop fully (quit + reopen)
+4. Docker Desktop's "Allow the default Docker socket to be used" setting
+   (Settings → Advanced) — already enabled by default on this machine
+5. Confirming Docker itself works fine via `docker ps` and raw `curl` to the
+   socket — it always did. **The bug was never in Docker. It was entirely in
+   the Testcontainers/docker-java Java library version.**
+
+**What ACTUALLY fixed it — BOTH steps required:**
+
+**Step 1 — Upgrade Testcontainers from 1.20.4 to 1.21.3 in `pom.xml`:**
+```xml
+<!-- pom.xml, inside <dependencyManagement><dependencies> -->
+<dependency>
+    <groupId>org.testcontainers</groupId>
+    <artifactId>testcontainers-bom</artifactId>
+    <version>1.21.3</version>  <!-- was 1.20.4 -->
+    <type>pom</type>
+    <scope>import</scope>
+</dependency>
+```
+Testcontainers 1.20.4's bundled `docker-java` client does not correctly
+negotiate API versions with Docker Engine 29.x (a documented, known
+incompatibility — see
+https://github.com/testcontainers/testcontainers-java/issues/11419,
+https://github.com/testcontainers/testcontainers-java/issues/11422,
+https://github.com/testcontainers/testcontainers-java/issues/11240, all
+reporting the IDENTICAL blank-JSON `BadRequestException` symptom against
+recent Docker Desktop versions). **If `docker version --format
+'{{.Server.Version}}'` on a future machine shows something in the 29.x+
+range, check whether the Testcontainers version in pom.xml needs bumping
+again** — this is an evolving compatibility boundary, not a one-time fix.
+
+**Step 2 — Create `~/.docker-java.properties` (a machine-level file, NOT
+project-level) forcing a specific, known-compatible Docker API version:**
+```bash
+cat > ~/.docker-java.properties << 'EOF'
+api.version=1.45
+EOF
+```
+This file is read by the `docker-java` library directly (not Testcontainers'
+own `.testcontainers.properties`) and overrides automatic API version
+negotiation, which was the actual point of failure. **This file is global to
+the machine, not specific to this repo** — if tests fail on a fresh clone of
+this repo on a NEW machine, check whether this file exists there too; it
+will not be present automatically since it lives outside the repo and is
+intentionally not committed (it's a per-machine Docker workaround, not
+project configuration).
+
+**Verification that both fixes are active**, from a clean test run, look
+for this exact sequence early in the log:
+```
+INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+INFO org.testcontainers.DockerClientFactory -- Connected to docker:
+  Server Version: 29.5.2
+  API Version: 1.54
+```
+If you see this instead of the blank-JSON `BadRequestException`, both fixes
+are working correctly.
 
 ### Local MongoDB (Docker)
 
@@ -121,6 +211,14 @@ docker run -d \
 27017. If the container ever needs to be recreated, always map back to
 `27018:27017` (host:container), never `27017:27017`.
 
+**Note: this is separate from Testcontainers' MongoDB.** The `dev` profile
+(running the actual app via `./run-dev.sh spring-boot:run`) uses the
+persistent `htmadvisory-mongo-dev` container above on port 27018.
+Integration TESTS (via `AbstractMongoIntegrationTest`) use a completely
+different, throwaway MongoDB container that Testcontainers creates and
+destroys automatically per test run, on a random port — the two never
+collide and you do not need to start anything extra before running tests.
+
 **Check if it's running:**
 ```bash
 docker ps
@@ -139,54 +237,42 @@ docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.people.
 
 **Spring Boot's built-in Liquibase auto-configuration (`spring.liquibase.*`
 properties) DOES NOT WORK with MongoDB and never will, in its current form.**
-This was confirmed two ways: (1) `--debug` logging showed
-`LiquibaseAutoConfiguration` permanently failing its activation condition
-because it requires a JDBC `javax.sql.DataSource`, which doesn't exist in
-this MongoDB-only project; (2) this is a long-standing, explicitly **declined**
-issue in Spring Boot itself
-(https://github.com/spring-projects/spring-boot/issues/29991) — the
-maintainers decided not to fix it. Do not add `spring.liquibase.url`,
-`spring.liquibase.change-log`, etc. to `application.yml` expecting them to
-do anything — they are silently ignored for this project.
+Confirmed via `--debug` logging (`LiquibaseAutoConfiguration` permanently
+fails its activation condition because it requires a JDBC
+`javax.sql.DataSource`, which doesn't exist in this MongoDB-only project)
+and via a long-standing, explicitly **declined** Spring Boot issue
+(https://github.com/spring-projects/spring-boot/issues/29991). Do not add
+`spring.liquibase.url`, `spring.liquibase.change-log`, etc. to
+`application.yml` expecting them to do anything.
 
 **The fix in place:** `org.htmadvisory.platform.shared.MongoLiquibaseRunner`
 manually runs Liquibase on application startup using Liquibase's own core
-API (`liquibase.Liquibase`, `DatabaseFactory.openDatabase(...)`) directly
-against the MongoDB connection string, completely bypassing Spring Boot's
-`SpringLiquibase` bean. It listens for `ApplicationReadyEvent` and runs
-`liquibase.update()` against `classpath:db/changelog-master.yaml`. **This
-class is load-bearing — do not remove it or "simplify" it back toward
-`spring.liquibase.*` properties.**
+API directly against the MongoDB connection string, completely bypassing
+Spring Boot's `SpringLiquibase` bean. **This class is load-bearing — do not
+remove it or "simplify" it back toward `spring.liquibase.*` properties.**
+The same runner/mechanism is exercised automatically inside integration
+tests too (via `AbstractMongoIntegrationTest`'s Testcontainers MongoDB
+instance), so tests validate against the identical schema-creation path
+used in dev/prod.
 
 **Changelog file location:** `src/main/resources/db/changelog-master.yaml`
-(note: NOT `db/changelog/db.changelog-master.yaml` as some Liquibase docs
-assume — that nested path is a convention for the JDBC-based Spring Boot
-integration we are NOT using). Individual changesets live in
-`src/main/resources/db/changelog/*.yaml` and are `include`d by the master
-file, in order.
+(NOT `db/changelog/db.changelog-master.yaml`). Individual changesets live in
+`src/main/resources/db/changelog/*.yaml`, `include`d by the master file, in
+order.
 
-**MongoDB-specific Liquibase quirk #2 — index `name` is required in
-`options`, not just as the sibling `indexName` YAML key:**
+**MongoDB-specific Liquibase quirk — index `name` is required in `options`,
+not just as the sibling `indexName` YAML key:**
 ```yaml
-# WRONG — fails with "The 'name' field is a required property of an
-# index specification" (MongoCommandException, error code 9)
-- createIndex:
-    collectionName: people
-    indexName: idx_people_email_unique
-    keys: '{ "email": 1 }'
-    options: '{ "unique": true }'
-
-# CORRECT — name must ALSO be inside options
+# CORRECT
 - createIndex:
     collectionName: people
     indexName: idx_people_email_unique
     keys: '{ "email": 1 }'
     options: '{ "unique": true, "name": "idx_people_email_unique" }'
 ```
-Every future `createIndex` changeset must include `name` inside `options`,
-matching `indexName`, or it will fail identically.
 
-**Current changesets (all verified working, in this exact order):**
+**Current changesets (all verified working via both manual app boot AND
+automated integration tests, in this exact order):**
 ```
 src/main/resources/db/changelog-master.yaml
   └── db/changelog/001-create-people-collection.yaml
@@ -207,23 +293,46 @@ src/main/java/org/htmadvisory/platform/people/
 ├── PersonRepository.java      # Spring Data auto-implemented; findByEmail()
 ├── EngagementRepository.java  # Spring Data auto-implemented; findByPersonId()
 └── PersonService.java         # findOrCreateByEmail(), recordEngagement()
+
+src/test/java/org/htmadvisory/platform/
+├── shared/
+│   └── AbstractMongoIntegrationTest.java   # Testcontainers base class
+└── people/
+    ├── PersonTestDataBuilder.java           # aPerson().withEmail(...).build()
+    └── PersonServiceIntegrationTest.java    # 5 tests, all passing
 ```
 
-**How every future domain should use this** (not yet exercised by real
-calling code — `contact` will be the first):
+**How every future domain should use the service layer** (not yet exercised
+by real calling code — `contact` will be the first):
 ```java
 Person person = personService.findOrCreateByEmail(email, name);
 personService.recordEngagement(person.getId(), "contact", "inquiry_submitted", metadata);
 ```
 
-**Verified so far:** the app boots with these classes present, Spring Data
-correctly discovers both repositories (`Found 2 MongoDB repository
-interfaces` in the startup log). **NOT yet verified:** that
-`findOrCreateByEmail()` actually behaves correctly against real data — e.g.
-that calling it twice with the same email returns the same `Person` rather
-than creating a duplicate (which the unique index would actually catch and
-throw on, but this has not been deliberately tested). Write this test before
-proceeding to `contact`.
+**Fully verified, via automated tests (not just manual boot/log inspection
+as of the prior update):**
+- A new email creates a new `Person`
+- The same email called twice returns the SAME `Person` — confirmed no
+  duplicate is created (the unique index plus the find-first logic both work
+  correctly together)
+- `firstSeenAt` stays stable across repeat visits; `lastSeenAt` updates
+  (test tolerates MongoDB's millisecond-precision truncation of `Instant`
+  values — see note below)
+- `recordEngagement()` correctly links an engagement to the right person
+- **One person accumulates engagements across multiple DIFFERENT domains**
+  (contact, survey, news) in one query — this is the actual cross-domain
+  identity payoff the whole `people` design exists for, and it's now proven,
+  not just designed
+
+**Known test-writing gotcha (relevant to all future domains): MongoDB
+truncates `Instant` to millisecond precision on write.** A Java `Instant`
+captured via `Instant.now()` often has microsecond or nanosecond precision;
+after a round-trip through MongoDB, the value read back will have only
+millisecond precision. Do NOT assert exact equality (`isEqualTo`) on an
+`Instant` field that has been written to and read back from MongoDB if you
+also hold a reference to the original in-memory value — use
+`isCloseTo(expected, within(1, ChronoUnit.SECONDS))` instead. This is not a
+bug in the application code; it's expected MongoDB BSON datetime behavior.
 
 ### Running the app
 
@@ -236,6 +345,16 @@ proceeding to `contact`.
 # changesets — use this for actual development):
 ./run-dev.sh spring-boot:run -Dspring-boot.run.profiles=dev
 ```
+
+### Running tests
+
+```bash
+./run-dev.sh test
+```
+First run on a clean machine will pull the `mongo:7` and
+`testcontainers/ryuk` images — expect this to take longer than subsequent
+runs. See "Testcontainers + Docker Desktop" above if this fails with a
+Docker-connection error.
 
 ### Health check
 
@@ -259,8 +378,6 @@ kill <PID shown above>
 ```
 **If a plain `kill` does not actually stop the process (verify with `lsof -i
 :8080` again — the PID may still show up), use `kill -9 <PID>` instead.**
-This has been necessary at least once already — a regular SIGTERM is not
-always sufficient.
 
 **Check this FIRST whenever a run fails immediately with no other obvious
 cause** — it's been the actual root cause more than once already.
@@ -268,28 +385,20 @@ cause** — it's been the actual root cause more than once already.
 ## Notes
 
 - Never commit real connection strings or credentials. Use environment
-  variables (`${MONGODB_URI}` etc.) once real cloud infrastructure exists —
-  the current `application-dev.yml` local Docker URI has no credentials and
-  is safe to commit as-is, but this changes once MongoDB Atlas or any cloud
-  database is introduced.
+  variables (`${MONGODB_URI}` etc.) once real cloud infrastructure exists.
 - The `income-request-mongodb` container belongs to a different, unrelated
-  project on this machine — do not stop, remove, or modify it as part of any
-  htmadvisory-backend work.
+  project on this machine — do not stop, remove, or modify it.
 - **`pom.xml` structural gotcha already hit once:** when adding new
   dependencies via scripted text insertion, double check they land inside
   the actual `<dependencies>` block, NOT inside `<dependencyManagement>`.
-  `<dependencyManagement>` only declares default versions — it does not
-  pull a dependency into the build unless it's ALSO listed under
-  `<dependencies>`. This exact mistake caused Liquibase to silently not be
-  on the classpath despite `mvn dependency:resolve` succeeding. Always
-  verify with `./run-dev.sh dependency:tree | grep -i <artifact>` after
-  adding a new dependency — a clean `dependency:resolve` is NOT sufficient
-  proof a dependency actually made it into the build.
-- **Testing harness gap (flagged 2026-06-27):** the `people` domain code was
-  written and manually verified (boot logs, manual `mongosh` inspection)
-  rather than via the Testcontainers/JUnit5/Mockito/AssertJ harness that
-  CLAUDE.md's build order says should exist BEFORE domain code. This was a
-  sequencing deviation, not a policy change — set up the real testing
-  harness next, write a test that exercises `findOrCreateByEmail()` and
-  `recordEngagement()` against a real Testcontainers MongoDB instance, and
-  do not repeat this shortcut for `contact` or any later domain.
+  `<dependencyManagement>` only declares default versions — it does not pull
+  a dependency into the build unless it's ALSO listed under
+  `<dependencies>`. Always verify with `./run-dev.sh dependency:tree | grep
+  -i <artifact>` after adding a new dependency.
+- **`~/.docker-java.properties` and `~/.testcontainers.properties` are
+  machine-level files, NOT part of this repo** (they live in the home
+  directory, outside any git-tracked folder, and are intentionally not
+  committed). If tests fail with Docker-connection errors on a brand new
+  machine, the FIRST thing to check is whether `~/.docker-java.properties`
+  exists there with `api.version=1.45` — see "Testcontainers + Docker
+  Desktop" above for the full diagnosis before re-debugging from scratch.
