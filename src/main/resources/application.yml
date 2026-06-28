@@ -13,6 +13,14 @@ spring:
   # string or credential in this shared file, since it is loaded in every
   # environment including production.
 
+  # NOTE: spring.liquibase.* properties are intentionally NOT used here.
+  # Spring Boot's built-in Liquibase auto-configuration requires a JDBC
+  # DataSource, which does not exist in this MongoDB-only project — that
+  # auto-configuration permanently refuses to activate regardless of these
+  # properties. Liquibase changesets are run manually instead, via
+  # org.htmadvisory.platform.shared.MongoLiquibaseRunner. See that class's
+  # Javadoc for the full explanation.
+
 management:
   endpoints:
     web:

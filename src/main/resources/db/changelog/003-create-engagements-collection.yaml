@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-engagements-collection
+      author: platform-team
+      changes:
+        - createCollection:
+            collectionName: engagements

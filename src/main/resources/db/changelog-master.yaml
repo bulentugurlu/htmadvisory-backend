@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/001-create-people-collection.yaml
+  - include:
+      file: db/changelog/002-create-people-email-index.yaml
+  - include:
+      file: db/changelog/003-create-engagements-collection.yaml
+  - include:
+      file: db/changelog/004-create-engagements-personid-index.yaml

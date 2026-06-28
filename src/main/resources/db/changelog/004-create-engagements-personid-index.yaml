@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-engagements-personid-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: engagements
+            indexName: idx_engagements_personid
+            keys: '{ "personId": 1 }'
+            options: '{ "name": "idx_engagements_personid" }'
