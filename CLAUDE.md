@@ -16,6 +16,10 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   globally-installed Java 25 works for this project)
 - **Framework:** Spring Boot 3.4.1
 - **Database:** MongoDB (via Spring Data MongoDB)
+- **Schema management:** Liquibase + liquibase-mongodb — **run MANUALLY, NOT
+  via Spring Boot's spring.liquibase.* auto-configuration** (see "Liquibase
+  + MongoDB" section below — this is a real, non-obvious gap and the fix is
+  load-bearing for the rest of this codebase)
 - **Build:** Maven
 
 ## Architecture Convention (summary — see main CLAUDE.md for full detail)
@@ -25,35 +29,39 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   technical layer. Endpoints are named for what the caller is doing
   (`POST /api/contacts/inquiries`), not for the database table touched.
 - **`shared/` is cross-cutting only** — the environment-token interceptor,
-  common exception handling. Never a dumping ground.
+  common exception handling, AND the `MongoLiquibaseRunner` (see below).
+  Never a dumping ground.
 - **Build order: `people`/`profile`/`consent`/`traffic` (foundational
   identity/marketing domains) FIRST, then `contact`** (first domain-specific
-  capability: `POST /api/contacts/inquiries`). Confirmed 2026-06-27 — do not
-  reorder this without revisiting the main CLAUDE.md's reasoning.
+  capability: `POST /api/contacts/inquiries`).
 
 ## Current Status (updated 2026-06-27)
 
 - [x] Repo created
 - [x] Maven + Spring Boot skeleton
 - [x] Spring Profiles configured (`application.yml` + `application-dev.yml`)
-- [x] Verify app boots locally with the `default` profile
-- [x] **Java 25 vs. Spring Boot Maven plugin incompatibility found and fixed**
-      — see "Java Version" section below
-- [x] **Local dev MongoDB running in Docker, app verified connected to it
-      under the `dev` profile** — see "Local MongoDB (Docker)" section below
+- [x] Java 25 vs. Spring Boot Maven plugin incompatibility found and fixed
+      (Java 21 pinned, `run-dev.sh` wrapper)
+- [x] Local dev MongoDB running in Docker, app verified connected under the
+      `dev` profile (port 27018 — see "Local MongoDB" below)
+- [x] **Liquibase dependencies correctly added to `pom.xml`** (fixed a real
+      structural bug — see "Liquibase + MongoDB" below)
+- [x] **Liquibase running successfully against MongoDB via a manual runner**
+      — `people` and `engagements` collections created, both indexes
+      verified correct (`idx_people_email_unique` unique on `email`,
+      `idx_engagements_personid` on `personId`)
 - [ ] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
       MongoDB above; not yet provisioned)
-- [ ] Liquibase + first changesets (people, engagements, profiles,
-      consent_records, visits collections — in that order, per main
-      CLAUDE.md's Liquibase Changeset Ordering)
 - [ ] Testing harness (Testcontainers, JUnit5/Mockito/AssertJ, PIT, Cucumber)
-- [ ] `people` domain built
+- [ ] `Person` and `Engagement` Java model classes (next immediate step —
+      collections/indexes exist, but no Java code defines their shape yet)
+- [ ] `people` domain service layer (`PersonService.findOrCreateByEmail()`, etc.)
 - [ ] `profile`, `consent`, `traffic` domains built
 - [ ] `contact` domain + first endpoint (`POST /api/contacts/inquiries`)
 - [ ] Terraform module + `htmadvisory-dev` GCP project created from code
 - [ ] AWS replication of the same Terraform module pattern (confirmed
-      2026-06-27 as a near-term goal, sequenced AFTER GCP dev is fully
-      proven — see main CLAUDE.md's "Multi-cloud requirement — REFINED")
+      2026-06-26 as a near-term goal, sequenced AFTER GCP dev is fully
+      proven)
 
 ## Local Development
 
@@ -74,10 +82,6 @@ in this repo:
 ```bash
 ./run-dev.sh spring-boot:run -Dspring-boot.run.profiles=dev
 ```
-
-If `mvn -version` (run directly, without the wrapper) ever shows Java 25
-again, that means something reset and this fix needs to be reapplied — it is
-not a one-time environment fix, it's pinned at the project level intentionally.
 
 ### Local MongoDB (Docker)
 
@@ -108,6 +112,75 @@ docker ps
 You should see `htmadvisory-mongo-dev` with `0.0.0.0:27018->27017/tcp` in
 the PORTS column.
 
+**Inspect the database directly (useful for debugging Liquibase/data issues):**
+```bash
+docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.getCollectionNames()"
+docker exec -it htmadvisory-mongo-dev mongosh htmadvisory_dev --eval "db.people.getIndexes()"
+```
+
+### Liquibase + MongoDB — READ BEFORE TOUCHING ANY CHANGESET OR LIQUIBASE CONFIG
+
+**Spring Boot's built-in Liquibase auto-configuration (`spring.liquibase.*`
+properties) DOES NOT WORK with MongoDB and never will, in its current form.**
+This was confirmed two ways: (1) `--debug` logging showed
+`LiquibaseAutoConfiguration` permanently failing its activation condition
+because it requires a JDBC `javax.sql.DataSource`, which doesn't exist in
+this MongoDB-only project; (2) this is a long-standing, explicitly **declined**
+issue in Spring Boot itself
+(https://github.com/spring-projects/spring-boot/issues/29991) — the
+maintainers decided not to fix it. Do not add `spring.liquibase.url`,
+`spring.liquibase.change-log`, etc. to `application.yml` expecting them to
+do anything — they are silently ignored for this project.
+
+**The fix in place:** `org.htmadvisory.platform.shared.MongoLiquibaseRunner`
+manually runs Liquibase on application startup using Liquibase's own core
+API (`liquibase.Liquibase`, `DatabaseFactory.openDatabase(...)`) directly
+against the MongoDB connection string, completely bypassing Spring Boot's
+`SpringLiquibase` bean. It listens for `ApplicationReadyEvent` and runs
+`liquibase.update()` against `classpath:db/changelog-master.yaml`. **This
+class is load-bearing — do not remove it or "simplify" it back toward
+`spring.liquibase.*` properties.**
+
+**Changelog file location:** `src/main/resources/db/changelog-master.yaml`
+(note: NOT `db/changelog/db.changelog-master.yaml` as some Liquibase docs
+assume — that nested path is a convention for the JDBC-based Spring Boot
+integration we are NOT using). Individual changesets live in
+`src/main/resources/db/changelog/*.yaml` and are `include`d by the master
+file, in order.
+
+**MongoDB-specific Liquibase quirk #2 — index `name` is required in
+`options`, not just as the sibling `indexName` YAML key:**
+```yaml
+# WRONG — fails with "The 'name' field is a required property of an
+# index specification" (MongoCommandException, error code 9)
+- createIndex:
+    collectionName: people
+    indexName: idx_people_email_unique
+    keys: '{ "email": 1 }'
+    options: '{ "unique": true }'
+
+# CORRECT — name must ALSO be inside options
+- createIndex:
+    collectionName: people
+    indexName: idx_people_email_unique
+    keys: '{ "email": 1 }'
+    options: '{ "unique": true, "name": "idx_people_email_unique" }'
+```
+Every future `createIndex` changeset must include `name` inside `options`,
+matching `indexName`, or it will fail identically.
+
+**Current changesets (all verified working, in this exact order):**
+```
+src/main/resources/db/changelog-master.yaml
+  └── db/changelog/001-create-people-collection.yaml
+  └── db/changelog/002-create-people-email-index.yaml
+  └── db/changelog/003-create-engagements-collection.yaml
+  └── db/changelog/004-create-engagements-personid-index.yaml
+```
+Per the main CLAUDE.md's Liquibase Changeset Ordering: `profiles`,
+`consent_records`, and `visits` collections/indexes come next, BEFORE
+`contacts` — do not reorder.
+
 ### Running the app
 
 ```bash
@@ -115,8 +188,8 @@ the PORTS column.
 # sanity checks, not real development):
 ./run-dev.sh spring-boot:run
 
-# dev profile (connects to the local Docker MongoDB above — use this for
-# actual development):
+# dev profile (connects to the local Docker MongoDB above, runs Liquibase
+# changesets — use this for actual development):
 ./run-dev.sh spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
@@ -135,12 +208,14 @@ the Docker container is running first.
 
 If `spring-boot:run` fails with `Port 8080 was already in use`, a previous
 run of this same app is probably still alive in another terminal tab (this
-has happened before — `Ctrl+C` does not always reliably kill the forked
-Maven/Spring Boot process). Find and kill it:
+has happened multiple times — `Ctrl+C` does not always reliably kill the
+forked Maven/Spring Boot process). Find and kill it:
 ```bash
 lsof -i :8080
 kill <PID shown above>
 ```
+**Check this FIRST whenever a run fails immediately with no other obvious
+cause** — it's been the actual root cause more than once already.
 
 ## Notes
 
@@ -152,3 +227,13 @@ kill <PID shown above>
 - The `income-request-mongodb` container belongs to a different, unrelated
   project on this machine — do not stop, remove, or modify it as part of any
   htmadvisory-backend work.
+- **`pom.xml` structural gotcha already hit once:** when adding new
+  dependencies via scripted text insertion, double check they land inside
+  the actual `<dependencies>` block, NOT inside `<dependencyManagement>`.
+  `<dependencyManagement>` only declares default versions — it does not
+  pull a dependency into the build unless it's ALSO listed under
+  `<dependencies>`. This exact mistake caused Liquibase to silently not be
+  on the classpath despite `mvn dependency:resolve` succeeding. Always
+  verify with `./run-dev.sh dependency:tree | grep -i <artifact>` after
+  adding a new dependency — a clean `dependency:resolve` is NOT sufficient
+  proof a dependency actually made it into the build.
