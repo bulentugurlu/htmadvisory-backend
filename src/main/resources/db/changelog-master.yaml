@@ -21,3 +21,7 @@ databaseChangeLog:
       file: db/changelog/010-create-visits-sessionid-index.yaml
   - include:
       file: db/changelog/011-create-visits-personid-index.yaml
+  - include:
+      file: db/changelog/012-create-contacts-collection.yaml
+  - include:
+      file: db/changelog/013-create-contacts-email-index.yaml

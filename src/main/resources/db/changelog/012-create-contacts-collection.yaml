@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-create-contacts-collection
+      author: platform-team
+      changes:
+        - createCollection:
+            collectionName: contacts

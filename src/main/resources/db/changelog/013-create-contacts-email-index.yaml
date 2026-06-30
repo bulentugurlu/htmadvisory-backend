@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 013-create-contacts-email-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: contacts
+            indexName: idx_contacts_email
+            keys: '{ "email": 1 }'
+            options: '{ "name": "idx_contacts_email" }'
