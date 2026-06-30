@@ -38,7 +38,7 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   identity/marketing domains) FIRST, then `contact`** (first domain-specific
   capability: `POST /api/contacts/inquiries`).
 
-## Current Status (updated 2026-06-28)
+## Current Status (updated 2026-06-30)
 
 - [x] Repo created
 - [x] Maven + Spring Boot skeleton
@@ -49,8 +49,7 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
       `dev` profile (port 27018 — see "Local MongoDB" below)
 - [x] Liquibase dependencies correctly added to `pom.xml`
 - [x] Liquibase running successfully against MongoDB via a manual runner —
-      `people` and `engagements` collections created, both indexes verified
-      correct
+      changesets 001–013 applied and verified
 - [x] `people` domain Java code written: `Person`, `Engagement`,
       `PersonRepository`, `EngagementRepository`, `PersonService` with
       `findOrCreateByEmail()` and `recordEngagement()`
@@ -65,13 +64,32 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
       — see "Testcontainers + Docker Desktop" section below. This took a
       genuinely long debugging session; the fix is now permanent and
       machine-level, should never need rediscovering.
+- [x] **`profile` domain built** — `PersonProfile`, `ProfileRepository`,
+      `ProfileService` with null-preserving merge-in-place semantics;
+      Liquibase changesets 005–006; 4 integration tests passing
+- [x] **`consent` domain built** — `ConsentRecord`, `ConsentRepository`,
+      `ConsentService`; append-only audit trail (status change = new record,
+      never an overwrite); Liquibase changesets 007–008; 6 integration tests
+      passing
+- [x] **`traffic` domain built** — `Visit`, `VisitRepository`,
+      `GeoLocationService` interface + `MaxMindGeoLocationService` (scaffolded,
+      degrades gracefully); `TrafficService` with `recordVisit()` (30-min
+      session window), `backfillPersonId()`; Liquibase changesets 009–011
+      (personId index is sparse); 8 integration tests passing; MaxMind
+      `geoip2` 4.2.0 added to `pom.xml`
+- [x] **`contact` domain built** — `ContactInquiry`, `ContactRepository`,
+      `ContactService`, `ContactController` (`POST /api/contacts/inquiries`,
+      201 Created); `ContactInquiryRequest` DTO with `@NotBlank`/`@Email`
+      validation; Liquibase changesets 012–013; **environment-token
+      interceptor** (`EnvironmentTokenInterceptor` + `WebMvcConfig`) applied
+      to `/api/**`, checks `X-HTM-Env-Token` header against `${HTM_ENV_TOKEN}`,
+      bypasses with warning when unset; 7 Mockito unit tests + 8 Testcontainers
+      integration tests passing; **38/38 total tests passing**
 - [ ] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
       MongoDB above; not yet provisioned)
 - [ ] PIT mutation testing configured (part of the full testing strategy in
       the main CLAUDE.md, not yet set up in this repo)
 - [ ] Cucumber configured (same — not yet set up)
-- [ ] `profile`, `consent`, `traffic` domains built
-- [ ] `contact` domain + first endpoint (`POST /api/contacts/inquiries`)
 - [ ] Terraform module + `htmadvisory-dev` GCP project created from code
 - [ ] AWS replication of the same Terraform module pattern (confirmed
       2026-06-26 as a near-term goal, sequenced AFTER GCP dev is fully
