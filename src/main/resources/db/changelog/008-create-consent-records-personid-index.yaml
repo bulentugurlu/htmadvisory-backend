@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-consent-records-personid-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: consent_records
+            indexName: idx_consent_records_personid
+            keys: '{ "personId": 1 }'
+            options: '{ "name": "idx_consent_records_personid" }'
