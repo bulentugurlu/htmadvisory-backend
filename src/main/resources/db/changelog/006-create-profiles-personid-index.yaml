@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-create-profiles-personid-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: profiles
+            indexName: idx_profiles_personid
+            keys: '{ "personId": 1 }'
+            options: '{ "name": "idx_profiles_personid" }'

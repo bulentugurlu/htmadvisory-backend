@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-profiles-collection
+      author: platform-team
+      changes:
+        - createCollection:
+            collectionName: profiles

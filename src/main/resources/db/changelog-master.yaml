@@ -7,3 +7,7 @@ databaseChangeLog:
       file: db/changelog/003-create-engagements-collection.yaml
   - include:
       file: db/changelog/004-create-engagements-personid-index.yaml
+  - include:
+      file: db/changelog/005-create-profiles-collection.yaml
+  - include:
+      file: db/changelog/006-create-profiles-personid-index.yaml
