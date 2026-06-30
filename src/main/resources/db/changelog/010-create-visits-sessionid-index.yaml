@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-create-visits-sessionid-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: visits
+            indexName: idx_visits_sessionid
+            keys: '{ "sessionId": 1 }'
+            options: '{ "name": "idx_visits_sessionid" }'

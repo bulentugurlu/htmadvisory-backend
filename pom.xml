@@ -75,6 +75,17 @@
             <version>4.29.2</version>
         </dependency>
 
+        <!-- MaxMind GeoIP2: IP geolocation (city + ISP) for the traffic domain.
+             Requires GeoLite2-City.mmdb and GeoLite2-ISP.mmdb files at runtime —
+             see MaxMindGeoLocationService for setup instructions.
+             Data freshness: databases go stale over months; a periodic refresh
+             process will be needed before this goes live in production. -->
+        <dependency>
+            <groupId>com.maxmind.geoip2</groupId>
+            <artifactId>geoip2</artifactId>
+            <version>4.2.0</version>
+        </dependency>
+
         <!-- Testing: JUnit 5 + Mockito + AssertJ — all bundled in this starter,
              per the Automated Testing Strategy locked in CLAUDE.md -->
         <dependency>

@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-create-visits-personid-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: visits
+            indexName: idx_visits_personid
+            keys: '{ "personId": 1 }'
+            options: '{ "sparse": true, "name": "idx_visits_personid" }'

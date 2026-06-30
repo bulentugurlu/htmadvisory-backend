@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-create-visits-collection
+      author: platform-team
+      changes:
+        - createCollection:
+            collectionName: visits

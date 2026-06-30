@@ -15,3 +15,9 @@ databaseChangeLog:
       file: db/changelog/007-create-consent-records-collection.yaml
   - include:
       file: db/changelog/008-create-consent-records-personid-index.yaml
+  - include:
+      file: db/changelog/009-create-visits-collection.yaml
+  - include:
+      file: db/changelog/010-create-visits-sessionid-index.yaml
+  - include:
+      file: db/changelog/011-create-visits-personid-index.yaml
