@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Testcontainers needs Docker — GitHub-hosted ubuntu-latest runners
+      # have Docker pre-installed and running, so no extra setup is needed.
+      # The singleton container pattern in AbstractMongoIntegrationTest means
+      # one MongoDB container is shared across all test classes in the run.
+      - name: Run tests
+        run: mvn test -B --no-transfer-progress
+
+      # Build the fat JAR (tests already ran above — skip them here)
+      - name: Build JAR
+        run: mvn package -DskipTests -B --no-transfer-progress
+
+      # Build the Docker image to confirm the Dockerfile is always valid.
+      # Does not push — push happens in the deploy workflow (step 14).
+      - name: Build Docker image
+        run: docker build -t htmadvisory-backend:ci .
+
+      # Upload the JAR as a build artifact so the deploy workflow can
+      # download it without rebuilding (optional but saves CI minutes).
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-backend-jar
+          path: target/platform-backend-*.jar
+          retention-days: 7
