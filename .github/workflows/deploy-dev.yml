@@ -62,13 +62,15 @@ jobs:
       # MONGODB_URI must be set as a separate secret or Cloud Run env var
       #   once MongoDB Atlas dev cluster exists — placeholder noted here.
       - name: Deploy to Cloud Run
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
         run: |
           gcloud run deploy htmadvisory-backend-dev \
             --image=us-central1-docker.pkg.dev/htmadvisory/htmadvisory/htmadvisory-backend:${{ github.sha }} \
             --region=us-central1 \
             --platform=managed \
             --no-allow-unauthenticated \
-            --set-env-vars="SPRING_PROFILES_ACTIVE=dev" \
+            --set-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI" \
             --memory=512Mi \
             --cpu=1 \
             --min-instances=0 \
