@@ -442,3 +442,24 @@ cause** — it's been the actual root cause more than once already.
   machine, the FIRST thing to check is whether `~/.docker-java.properties`
   exists there with `api.version=1.45` — see "Testcontainers + Docker
   Desktop" above for the full diagnosis before re-debugging from scratch.
+
+## MongoDB Atlas Connection — URL Encoding Gotcha
+
+**Special characters in passwords must be URL-encoded in the connection string.**
+The `@` character is a reserved URL delimiter that separates credentials from
+the host — if the password contains `@`, it must be encoded as `%40`, otherwise
+the connection string parser splits at the wrong place and authentication fails
+with a cryptic `Exception authenticating` error.
+
+Example:
+clear
+Other characters that must be encoded if they appear in a MongoDB password:
+- `@` → `%40`
+- `:` → `%3A`
+- `/` → `%2F`
+- `?` → `%3F`
+- `#` → `%23`
+
+**Simplest fix:** use passwords with only letters and numbers — avoids encoding
+issues entirely. If special characters are needed, encode them before embedding
+in the URI.
