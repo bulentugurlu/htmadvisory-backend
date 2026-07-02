@@ -1,0 +1,83 @@
+name: Deploy to Cloud Run (dev)
+
+on:
+  push:
+    branches: [ main ]
+
+# Required for Workload Identity Federation — tells GitHub to issue
+# an OIDC token that GCP can verify without a long-lived JSON key.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Build the fat JAR — tests already run in the CI workflow on every
+      # push; we skip them here to keep the deploy fast.
+      - name: Build JAR
+        run: mvn package -DskipTests -B --no-transfer-progress
+
+      # Authenticate to GCP via Workload Identity Federation.
+      # No JSON key needed — GitHub issues a short-lived OIDC token that
+      # GCP verifies against the workload identity pool we configured.
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # Configure Docker to push to GCP Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # Build and push the Docker image.
+      # Tagged with both the git SHA (immutable, for rollbacks) and
+      # 'latest' (for convenience).
+      - name: Build and push Docker image
+        run: |
+          IMAGE=us-central1-docker.pkg.dev/htmadvisory/htmadvisory/htmadvisory-backend
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+      # Deploy to Cloud Run.
+      # --no-allow-unauthenticated: dev is IAM-only, not public-facing
+      #   (per the architecture decision locked in ARCHITECTURE.md).
+      #   Access via: gcloud run services proxy htmadvisory-backend-dev
+      # --set-env-vars SPRING_PROFILES_ACTIVE=dev: activates application-dev.yml
+      # MONGODB_URI must be set as a separate secret or Cloud Run env var
+      #   once MongoDB Atlas dev cluster exists — placeholder noted here.
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy htmadvisory-backend-dev \
+            --image=us-central1-docker.pkg.dev/htmadvisory/htmadvisory/htmadvisory-backend:${{ github.sha }} \
+            --region=us-central1 \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --set-env-vars="SPRING_PROFILES_ACTIVE=dev" \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=10 \
+            --project=htmadvisory
+
+      - name: Show service URL
+        run: |
+          gcloud run services describe htmadvisory-backend-dev \
+            --region=us-central1 \
+            --project=htmadvisory \
+            --format='value(status.url)'

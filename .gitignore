@@ -19,3 +19,4 @@ target/
 # Environment-specific secrets (never commit real values)
 .env
 application-local.yml
+github-actions-key.json
