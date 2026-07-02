@@ -38,7 +38,7 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   identity/marketing domains) FIRST, then `contact`** (first domain-specific
   capability: `POST /api/contacts/inquiries`).
 
-## Current Status (updated 2026-06-30)
+## Current Status (updated 2026-07-02)
 
 - [x] Repo created
 - [x] Maven + Spring Boot skeleton
@@ -85,7 +85,29 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
       to `/api/**`, checks `X-HTM-Env-Token` header against `${HTM_ENV_TOKEN}`,
       bypasses with warning when unset; 7 Mockito unit tests + 8 Testcontainers
       integration tests passing; **38/38 total tests passing**
-- [ ] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
+- [x] **Dockerfile added** — multi-stage build (JDK builder + JRE runtime),
+      non-root user, container-aware JVM flags (`-XX:+UseContainerSupport`,
+      `-XX:MaxRAMPercentage=75.0`); `.dockerignore` added; image verified
+      building and starting cleanly locally
+- [x] **CI workflow added** (`.github/workflows/ci.yml`) — runs on every
+      push and PR to main: 38/38 tests, JAR build, Docker image build;
+      first run passed in 2m 12s on GitHub-hosted runner
+- [x] **Deploy workflow added** (`.github/workflows/deploy-dev.yml`) —
+      runs on push to main: builds JAR, pushes Docker image to GCP Artifact
+      Registry (`us-central1-docker.pkg.dev/htmadvisory/htmadvisory/htmadvisory-backend`),
+      deploys to Cloud Run (`htmadvisory-backend-dev`, `--no-allow-unauthenticated`
+      per architecture decision — IAM-only, not public-facing)
+- [x] **Workload Identity Federation configured** — GitHub Actions
+      authenticates to GCP without a long-lived JSON key; pool and provider
+      created, `github-actions-deploy` service account bound; 3 GitHub
+      secrets added: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`,
+      `MONGODB_URI`
+- [x] **MongoDB Atlas dev cluster provisioned** — `htmadvisory-dev` cluster
+      on GCP / Iowa (us-central1), M0 free tier, `0.0.0.0/0` IP allowlist
+      for Cloud Run compatibility; connection string stored as `MONGODB_URI`
+      GitHub secret; `SPRING_PROFILES_ACTIVE=dev` + `MONGODB_URI` passed
+      to Cloud Run via deploy workflow
+- [x] MongoDB Atlas dev cluster connected (cloud — separate from local Docker
       MongoDB above; not yet provisioned)
 - [ ] PIT mutation testing configured (part of the full testing strategy in
       the main CLAUDE.md, not yet set up in this repo)
