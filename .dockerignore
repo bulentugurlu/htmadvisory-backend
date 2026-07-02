@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Build output — the Dockerfile rebuilds this inside the container
+target/
+
+# Local dev scripts — not needed in the image
+run-dev.sh
+
+# Docs — not needed in the image
+docs/
+README.md
+CLAUDE.md
+
+# IDE and OS
+.idea/
+*.iml
+.DS_Store
+
+# Test output
+surefire-reports/
+
+# MaxMind databases — never commit these; they are mounted at runtime
+*.mmdb
+geoip/
