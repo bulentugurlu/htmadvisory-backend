@@ -38,7 +38,7 @@ Spring Boot backend service for the HTM Advisory platform. Companion to
   identity/marketing domains) FIRST, then `contact`** (first domain-specific
   capability: `POST /api/contacts/inquiries`).
 
-## Current Status (updated 2026-07-02)
+## Current Status (updated 2026-07-05)
 
 - [x] Repo created
 - [x] Maven + Spring Boot skeleton
@@ -463,3 +463,43 @@ Other characters that must be encoded if they appear in a MongoDB password:
 **Simplest fix:** use passwords with only letters and numbers — avoids encoding
 issues entirely. If special characters are needed, encode them before embedding
 in the URI.
+
+## CORS Configuration
+
+`CorsConfig.java` added to `shared/` — allows cross-origin requests from:
+- `https://htmadvisory.org` and `https://www.htmadvisory.org` (production)
+- `http://localhost:5173` and `http://localhost:5174` (local dev)
+
+Applied to `/api/**` only. `EnvironmentTokenInterceptor` updated to allow
+OPTIONS preflight requests to pass through without token check — required
+for browser CORS to work.
+
+## IAM Binding Gotcha — allUsers Wiped on Every Update
+
+Every `gcloud run services update` command on `htmadvisory-backend-dev`
+wipes the `allUsers` IAM binding, making the service private again.
+
+**After every `gcloud run services update`, re-add the binding:**
+```bash
+gcloud run services add-iam-policy-binding htmadvisory-backend-dev \
+  --region=us-central1 \
+  --member="allUsers" \
+  --role="roles/run.invoker" \
+  --project=htmadvisory
+```
+
+## Frontend Integration
+
+- `VITE_API_BASE_URL` and `VITE_API_TOKEN` baked into Vite bundle via
+  Docker build args in `.github/workflows/deploy.yml` (frontend repo)
+- Backend URL: `https://htmadvisory-backend-dev-2ftqzkl3nq-uc.a.run.app`
+- Contact form confirmed persisting to MongoDB Atlas — `people: 1`,
+  `contacts: 1` verified in Atlas after live form submission
+
+## Liquibase Atlas Gotcha
+
+Atlas cluster only had changesets 001–007 after initial deploy. Changesets
+008–013 were applied manually via mongosh + DATABASECHANGELOG inserts.
+Root cause: Liquibase lock was stuck (`locked: true`) from a failed run.
+Fix: `bypassDocumentValidation: true` update to clear the lock, then
+force redeploy. If this happens again, check DATABASECHANGELOGLOCK first.
