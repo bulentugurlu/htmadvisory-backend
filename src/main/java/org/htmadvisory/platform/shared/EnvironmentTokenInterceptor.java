@@ -40,6 +40,11 @@ public class EnvironmentTokenInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
                              Object handler) throws Exception {
+        // Allow CORS preflight requests to pass through without token check
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
         if (expectedToken == null || expectedToken.isBlank()) {
             log.warn("HTM_ENV_TOKEN is not configured — environment token check is DISABLED. " +
                      "This is acceptable for local development but MUST be set in production.");
