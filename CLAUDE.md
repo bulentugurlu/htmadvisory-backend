@@ -503,3 +503,28 @@ Atlas cluster only had changesets 001–007 after initial deploy. Changesets
 Root cause: Liquibase lock was stuck (`locked: true`) from a failed run.
 Fix: `bypassDocumentValidation: true` update to clear the lock, then
 force redeploy. If this happens again, check DATABASECHANGELOGLOCK first.
+
+## PostgreSQL — Cloud SQL (as of 2026-07-11)
+
+- Instance: `htmadvisory-postgres-dev` (db-g1-small, ENTERPRISE, us-central1-c)
+- Database: `htmadvisory_dev`
+- User: `htmadvisory_user`
+- Connection name: `htmadvisory:us-central1:htmadvisory-postgres-dev`
+- GitHub secrets: `POSTGRESQL_URL`, `POSTGRESQL_USER`, `POSTGRESQL_PASSWORD`
+- IAM: compute service account has `roles/cloudsql.client`
+- Deploy workflow updated to pass PostgreSQL env vars to Cloud Run
+- Use Flyway (NOT Liquibase) for PostgreSQL migrations — Liquibase is
+  already wired for MongoDB and adding it for PostgreSQL creates conflicts
+- Migration files go in `src/main/resources/db/migration/` (separate from
+  existing `db/changelog/` which is MongoDB/Liquibase)
+
+## Audit Framework (as of 2026-07-11)
+
+- Full implementation brief at `docs/audit-framework-brief.md`
+- New `audit` domain — extensible plugin architecture
+- Stack: Spring Boot + PostgreSQL (Flyway) + Playwright headless browser +
+  Claude API for natural language recommendations
+- Endpoint: `POST /api/audits/run` (async, returns 202) + `GET /api/audits/{id}`
+- Audit types: SEO (5 auditors), Accessibility (4 auditors) — more addable
+- Frontend page: `/audit` in htmadvisory-frontend repo
+- NOT YET BUILT — brief committed, implementation pending
