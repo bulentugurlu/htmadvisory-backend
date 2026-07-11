@@ -64,13 +64,16 @@ jobs:
       - name: Deploy to Cloud Run
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          POSTGRESQL_URL: ${{ secrets.POSTGRESQL_URL }}
+          POSTGRESQL_USER: ${{ secrets.POSTGRESQL_USER }}
+          POSTGRESQL_PASSWORD: ${{ secrets.POSTGRESQL_PASSWORD }}
         run: |
           gcloud run deploy htmadvisory-backend-dev \
             --image=us-central1-docker.pkg.dev/htmadvisory/htmadvisory/htmadvisory-backend:${{ github.sha }} \
             --region=us-central1 \
             --platform=managed \
             --no-allow-unauthenticated \
-            --set-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI" \
+            --set-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI,POSTGRESQL_URL=$POSTGRESQL_URL,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD" \
             --memory=512Mi \
             --cpu=1 \
             --min-instances=0 \
