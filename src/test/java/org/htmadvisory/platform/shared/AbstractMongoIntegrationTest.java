@@ -4,6 +4,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
  * Base class for integration tests that need a real MongoDB instance.
@@ -13,43 +14,50 @@ import org.testcontainers.containers.MongoDBContainer;
  * fake can behave differently from real MongoDB in ways that matter.
  *
  * SINGLETON CONTAINER PATTERN — read before changing this class:
- * The MongoDB container is started ONCE in a static initializer block and
- * shared across EVERY test class that extends this one, for the lifetime of
- * the whole test JVM. It is intentionally never stopped explicitly — Ryuk
- * (Testcontainers' own reaper container) destroys it automatically when the
- * JVM exits.
+ * Both containers (MongoDB and PostgreSQL) are started ONCE in a static
+ * initializer block and shared across EVERY test class that extends this one,
+ * for the lifetime of the whole test JVM. Ryuk destroys them automatically
+ * when the JVM exits.
  *
- * WHY THIS MATTERS (a real bug this fixes, found 2026-06-28): if each test
- * class instead declares its own @Container-managed instance (one container
- * per class), Spring Boot Test's ApplicationContext caching can reuse a
- * cached context — including its MongoClient bean — from a PREVIOUS test
- * class against a container that has ALREADY been torn down by Ryuk after
- * that previous class finished. The symptom is every test in the second (and
- * later) test class timing out after ~30s with "Connection refused" /
- * "MongoTimeoutException", even though the first test class's container
- * worked perfectly and the second test class's OWN new container also
- * started successfully — the bug is that Spring never connects to the new
- * one. The singleton pattern eliminates this: there genuinely is only ever
- * one container and one port for the entire test run, so there is nothing
- * for a stale cached context to point at incorrectly.
+ * WHY BOTH CONTAINERS HERE: once spring-boot-starter-data-jpa is on the
+ * classpath, every @SpringBootTest context requires a DataSource. Rather than
+ * splitting tests into two incompatible base classes that Spring's
+ * ApplicationContext caching would treat as two separate contexts (causing
+ * double startup costs and the container/context mismatch bug documented
+ * below), we start both here and share one context across all tests.
  *
- * Do NOT add @Container or @Testcontainers back to this class, and do NOT
- * make the container non-static or call mongoDBContainer.stop() anywhere —
- * both reintroduce the exact bug this pattern fixes.
+ * WHY NOT @Testcontainers/@Container: if each test class declares its own
+ * @Container instance, Spring Boot Test's ApplicationContext caching can
+ * reuse a context from a previous class against a container that has already
+ * been torn down by Ryuk — causing MongoTimeoutException in the second (and
+ * later) test class even though their own container started fine. The
+ * singleton pattern eliminates this completely.
+ *
+ * Do NOT add @Container or @Testcontainers back, and do NOT call .stop()
+ * on either container.
  */
 @SpringBootTest
 public abstract class AbstractMongoIntegrationTest {
 
     static final MongoDBContainer mongoDBContainer;
+    static final PostgreSQLContainer<?> postgresContainer;
 
     static {
         mongoDBContainer = new MongoDBContainer("mongo:7");
+        postgresContainer = new PostgreSQLContainer<>("postgres:16-alpine")
+                .withDatabaseName("htmadvisory_test")
+                .withUsername("htmadvisory")
+                .withPassword("testonly");
         mongoDBContainer.start();
+        postgresContainer.start();
     }
 
     @DynamicPropertySource
-    static void mongoProperties(DynamicPropertyRegistry registry) {
+    static void containerProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+        registry.add("spring.flyway.enabled", () -> "true");
     }
-
 }

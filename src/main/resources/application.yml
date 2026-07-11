@@ -21,6 +21,27 @@ spring:
   # org.htmadvisory.platform.shared.MongoLiquibaseRunner. See that class's
   # Javadoc for the full explanation.
 
+  # PostgreSQL datasource for the audit domain.
+  # Defaults allow local development without environment variables set.
+  # Tests override these via DynamicPropertySource.
+  datasource:
+    url: ${POSTGRESQL_URL:jdbc:postgresql://localhost:5432/htmadvisory_dev}
+    username: ${POSTGRESQL_USER:htmadvisory}
+    password: ${POSTGRESQL_PASSWORD:localdevonly}
+    driver-class-name: org.postgresql.Driver
+
+  # Flyway is disabled by default — enabled per-environment (tests override
+  # via DynamicPropertySource, dev profile sets it explicitly).
+  flyway:
+    enabled: false
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
 management:
   endpoints:
     web:

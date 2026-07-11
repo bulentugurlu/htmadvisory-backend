@@ -20,3 +20,4 @@ target/
 .env
 application-local.yml
 github-actions-key.json
+.claude/

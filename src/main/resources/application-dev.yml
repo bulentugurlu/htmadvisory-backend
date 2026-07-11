@@ -12,6 +12,20 @@ spring:
       #   uri: ${MONGODB_URI}
       uri: ${MONGODB_URI:mongodb://localhost:27018/htmadvisory_dev}
 
+  datasource:
+    url: ${POSTGRESQL_URL:jdbc:postgresql://localhost:5432/htmadvisory_dev}
+    username: ${POSTGRESQL_USER:htmadvisory}
+    password: ${POSTGRESQL_PASSWORD:localdevonly}
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    enabled: true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
 management:
   endpoint:
     health:

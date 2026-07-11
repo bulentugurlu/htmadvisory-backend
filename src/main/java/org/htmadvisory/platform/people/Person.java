@@ -42,6 +42,11 @@ public class Person {
         this.lastSeenAt = lastSeenAt;
     }
 
+    public Person(String email, String name) {
+        this.email = email;
+        this.name = name;
+    }
+
     public String getId() {
         return id;
     }
