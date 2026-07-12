@@ -75,10 +75,10 @@ jobs:
             --platform=managed \
             --no-allow-unauthenticated \
             --set-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI,POSTGRESQL_URL=$POSTGRESQL_URL,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD,ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" \
-            --memory=512Mi \
-            --cpu=1 \
-            --no-cpu-throttling \
-            --min-instances=0 \
+            --memory=1Gi \
+            --cpu=2 \
+            --cpu-boost \
+            --min-instances=1 \
             --max-instances=10 \
             --project=htmadvisory
 
