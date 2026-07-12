@@ -24,20 +24,49 @@ RUN mvn package -DskipTests -B --no-transfer-progress
 # ─────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-jammy
 
-# Install Chromium for Playwright headless browser (audit domain)
-# --no-install-recommends keeps the image lean
+# Install Playwright browser dependencies and Node.js to run playwright install
+# Ubuntu Jammy does not have a 'chromium' apt package — Playwright manages its own browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    chromium-driver \
+    nodejs \
+    npm \
+    wget \
+    ca-certificates \
     fonts-liberation \
     libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libc6 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libgcc1 \
+    libglib2.0-0 \
     libgtk-3-0 \
+    libnspr4 \
     libnss3 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
     libxss1 \
+    libxtst6 \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# Install Playwright CLI and download Chromium browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npm install -g playwright@1.44.0 && playwright install chromium
 
 # Run as non-root for security — Cloud Run is fine with non-root containers
 RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
