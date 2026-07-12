@@ -97,6 +97,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Cloud SQL connector — required for Cloud Run to connect to Cloud SQL PostgreSQL -->
+        <dependency>
+            <groupId>com.google.cloud.sql</groupId>
+            <artifactId>postgres-socket-factory</artifactId>
+            <version>1.19.0</version>
+        </dependency>
+
         <!-- Flyway for PostgreSQL schema migrations (audit domain) -->
         <dependency>
             <groupId>org.flywaydb</groupId>
