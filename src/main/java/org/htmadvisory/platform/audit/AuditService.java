@@ -4,6 +4,8 @@ import org.htmadvisory.platform.audit.model.Audit;
 import org.htmadvisory.platform.audit.model.AuditStatus;
 import org.htmadvisory.platform.audit.repository.AuditRepository;
 import org.htmadvisory.platform.people.PersonService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,8 @@ import java.util.UUID;
 
 @Service
 public class AuditService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuditService.class);
 
     private final AuditRepository auditRepository;
     private final PersonService personService;
@@ -47,7 +51,10 @@ public class AuditService {
         auditRepository.save(audit);
 
         // Fire async execution (separate bean — avoids @Async self-invocation proxy bypass)
+        log.info("startAudit: saved audit={} id={}, calling auditExecutor.execute()",
+                audit.getUrl(), audit.getId());
         auditExecutor.execute(audit.getId());
+        log.info("startAudit: auditExecutor.execute() returned (should be immediate if @Async is working)");
 
         return new AuditStartResponse(
                 audit.getId(),

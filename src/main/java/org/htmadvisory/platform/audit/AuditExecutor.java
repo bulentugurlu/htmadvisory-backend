@@ -52,6 +52,8 @@ public class AuditExecutor {
     @Async("auditTaskExecutor")
     @Transactional
     public void execute(UUID auditId) {
+        log.info("AuditExecutor.execute() entered — auditId={} thread={}", auditId,
+                Thread.currentThread().getName());
         Audit audit = auditRepository.findById(auditId)
                 .orElseThrow(() -> new IllegalStateException("Audit not found: " + auditId));
 
