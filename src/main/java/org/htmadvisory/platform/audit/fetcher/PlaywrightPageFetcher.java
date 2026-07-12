@@ -20,15 +20,18 @@ public class PlaywrightPageFetcher {
                     new BrowserType.LaunchOptions()
                             .setHeadless(true)
                             .setArgs(List.of(
-                                    "--no-sandbox",           // required in containers (no user namespace)
-                                    "--disable-dev-shm-usage", // Cloud Run /dev/shm is tiny; use /tmp instead
+                                    "--no-sandbox",             // required in containers (no user namespace)
+                                    "--disable-setuid-sandbox", // belt-and-suspenders for sandbox disable
+                                    "--disable-dev-shm-usage",  // Cloud Run /dev/shm is tiny; use /tmp instead
                                     "--disable-gpu",
-                                    "--no-zygote"
+                                    "--no-first-run",
+                                    "--no-zygote",
+                                    "--single-process"          // avoids forking sub-processes in constrained envs
                             )));
             try {
                 Page page = browser.newPage();
                 page.navigate(url, new Page.NavigateOptions()
-                        .setTimeout(15000)
+                        .setTimeout(30000)
                         .setWaitUntil(WaitUntilState.NETWORKIDLE));
 
                 String html = page.content();
