@@ -27,9 +27,8 @@ FROM eclipse-temurin:21-jre-jammy
 # Install Playwright browser dependencies and Node.js to run playwright install
 # Ubuntu Jammy does not have a 'chromium' apt package — Playwright manages its own browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nodejs \
-    npm \
     wget \
+    curl \
     ca-certificates \
     fonts-liberation \
     libatk-bridge2.0-0 \
@@ -64,10 +63,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20 (Ubuntu Jammy default is 12 which is too old for Playwright)
-# Then install Playwright CLI and download Chromium browser
+# Install Node.js 20 via NodeSource (Ubuntu Jammy ships Node 12 which is too old for Playwright)
+# Then install Playwright and download its bundled Chromium browser
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN npm install -g n && n 20 &&     npm install -g playwright@1.44.0 &&     playwright install chromium &&     playwright install-deps chromium
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g playwright@1.44.0 && \
+    playwright install chromium && \
+    playwright install-deps chromium
 
 # Run as non-root for security — Cloud Run is fine with non-root containers
 RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
