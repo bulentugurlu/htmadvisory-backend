@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.util.List;
 
 @Component
 public class PlaywrightPageFetcher {
@@ -16,7 +17,14 @@ public class PlaywrightPageFetcher {
     public PageContent fetch(String url) {
         try (Playwright playwright = Playwright.create()) {
             Browser browser = playwright.chromium().launch(
-                    new BrowserType.LaunchOptions().setHeadless(true));
+                    new BrowserType.LaunchOptions()
+                            .setHeadless(true)
+                            .setArgs(List.of(
+                                    "--no-sandbox",           // required in containers (no user namespace)
+                                    "--disable-dev-shm-usage", // Cloud Run /dev/shm is tiny; use /tmp instead
+                                    "--disable-gpu",
+                                    "--no-zygote"
+                            )));
             try {
                 Page page = browser.newPage();
                 page.navigate(url, new Page.NavigateOptions()
