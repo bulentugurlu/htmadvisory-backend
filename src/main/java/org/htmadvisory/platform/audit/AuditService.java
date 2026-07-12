@@ -64,7 +64,13 @@ public class AuditService {
 
     @Transactional(readOnly = true)
     public Optional<Audit> findById(UUID id) {
-        return auditRepository.findByIdWithDimensions(id);
+        return auditRepository.findByIdWithDimensions(id)
+                .map(audit -> {
+                    // Force-initialize findings for each dimension while the transaction is open,
+                    // preventing LazyInitializationException when the controller serializes the response.
+                    audit.getDimensions().forEach(d -> d.getFindings().size());
+                    return audit;
+                });
     }
 
     @Transactional(readOnly = true)
