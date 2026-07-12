@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
@@ -50,11 +49,10 @@ public class AuditExecutor {
     }
 
     @Async("auditTaskExecutor")
-    @Transactional
     public void execute(UUID auditId) {
         log.info("AuditExecutor.execute() entered — auditId={} thread={}", auditId,
                 Thread.currentThread().getName());
-        Audit audit = auditRepository.findById(auditId)
+        Audit audit = auditRepository.findByIdWithDimensions(auditId)
                 .orElseThrow(() -> new IllegalStateException("Audit not found: " + auditId));
 
         try {
