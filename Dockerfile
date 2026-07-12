@@ -24,6 +24,21 @@ RUN mvn package -DskipTests -B --no-transfer-progress
 # ─────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-jammy
 
+# Install Chromium for Playwright headless browser (audit domain)
+# --no-install-recommends keeps the image lean
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    fonts-liberation \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libnss3 \
+    libxss1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Run as non-root for security — Cloud Run is fine with non-root containers
 RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
 
