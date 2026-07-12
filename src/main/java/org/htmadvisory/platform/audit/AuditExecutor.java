@@ -12,6 +12,7 @@ import org.htmadvisory.platform.audit.model.AuditDimension;
 import org.htmadvisory.platform.audit.model.AuditFinding;
 import org.htmadvisory.platform.audit.model.AuditStatus;
 import org.htmadvisory.platform.audit.repository.AuditRepository;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -40,6 +41,12 @@ public class AuditExecutor {
         this.pageFetcher = pageFetcher;
         this.enricher = enricher;
         this.auditors = auditors;
+    }
+
+    @PostConstruct
+    public void init() {
+        log.info("AuditExecutor initialized — {} auditor(s) registered, auditTaskExecutor thread pool ready",
+                auditors.size());
     }
 
     @Async("auditTaskExecutor")

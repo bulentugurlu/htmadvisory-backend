@@ -18,6 +18,11 @@ import org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfigurati
  * requires a JDBC DataSource, which was unavailable until the audit domain added
  * PostgreSQL. Now that a DataSource exists, the autoconfiguration would activate
  * and fail trying to find a JDBC changelog. The manual runner remains in place.
+ *
+ * Repository scanning is split in DataStoreConfig (shared/) so Spring Data
+ * doesn't apply both JPA and Mongo scanners to every repository interface.
+ * Kept in a separate @Configuration class so @WebMvcTest slice tests are not
+ * affected — WebMvcTypeExcludeFilter excludes non-web @Configuration beans.
  */
 @SpringBootApplication(exclude = {LiquibaseAutoConfiguration.class})
 public class PlatformBackendApplication {
