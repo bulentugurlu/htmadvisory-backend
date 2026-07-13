@@ -1,5 +1,6 @@
 package org.htmadvisory.platform.audit.fetcher;
 
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
@@ -24,14 +25,16 @@ public class PlaywrightPageFetcher {
 
     public PageContent fetch(String url) {
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("HTMAdvisoryBot/1.0")
+            Connection connection = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (compatible; HTMAdvisoryBot/1.0)")
                     .timeout(15000)
-                    .get();
+                    .followRedirects(true)
+                    .maxBodySize(0);
+            Document doc = connection.get();
 
             String html = doc.outerHtml();
             String title = doc.title();
-            String finalUrl = doc.location();
+            String finalUrl = connection.response().url().toString();
             String robotsTxt = fetchRobotsTxtViaHttp(extractBaseUrl(finalUrl));
 
             return new PageContent(html, title, finalUrl, robotsTxt);
