@@ -82,6 +82,14 @@ jobs:
             --max-instances=10 \
             --project=htmadvisory
 
+      - name: Re-add allUsers IAM binding (wiped by gcloud run deploy on every deploy)
+        run: |
+          gcloud run services add-iam-policy-binding htmadvisory-backend-dev \
+            --region=us-central1 \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --project=htmadvisory
+
       - name: Show service URL
         run: |
           gcloud run services describe htmadvisory-backend-dev \
