@@ -528,3 +528,29 @@ force redeploy. If this happens again, check DATABASECHANGELOGLOCK first.
 - Audit types: SEO (5 auditors), Accessibility (4 auditors) — more addable
 - Frontend page: `/audit` in htmadvisory-frontend repo
 - NOT YET BUILT — brief committed, implementation pending
+
+## Audit Domain — Final State (as of 2026-07-13)
+
+- JSoup replaced Playwright for HTML fetching (Playwright Java driver fails in Cloud Run)
+- JSoup fetch: follow redirects, real UA string, finalUrl from response URL
+- 92/92 tests passing (77 original + 15 new audit tests)
+- htmadvisory.org audit confirmed: 100/100 Grade A (SEO + Accessibility)
+- Playwright removed from Dockerfile and pom.xml
+- Phase 2 (future): dedicated Playwright microservice as separate Cloud Run service
+
+## Accessibility & SEO Standards for htmadvisory.org (audit confirmed 2026-07-13)
+
+- index.html has: semantic landmark elements (header/nav/main/footer with roles),
+  h1 placeholder, all meta tags, Open Graph, Schema.org, sitemap, robots.txt
+- All pages have: <nav>, role="banner" on hero div, role="main" on body div,
+  role="contentinfo" on footer div
+- Meta description: 120-160 chars max
+- Site scores 100/A on HTM Advisory audit tool (all 9 dimensions)
+
+## Phase III — Auth Domain (in progress, 2026-07-13)
+
+- Branch: feature/member-auth-domain in htmadvisory-backend
+- Auth files that were prematurely created by Claude Code are in /tmp/auth-backup/
+  on the development machine — do NOT use these; Phase III chat will rebuild cleanly
+- Do NOT modify WebMvcConfig.java or EnvironmentTokenInterceptor.java until
+  JWT is fully working and tested — those files breaking caused cascading failures
