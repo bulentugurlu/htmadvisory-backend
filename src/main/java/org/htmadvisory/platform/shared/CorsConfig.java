@@ -15,12 +15,15 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Allow the production frontend and local dev
-        config.setAllowedOrigins(List.of(
+        // Allow the production frontend and local dev.
+        // Localhost uses a pattern (not exact ports) because Vite
+        // auto-increments its port (5173, 5174, 5175, ...) whenever the
+        // default is already taken by another running dev server — an
+        // exact-port allowlist breaks every time that happens.
+        config.setAllowedOriginPatterns(List.of(
             "https://htmadvisory.org",
             "https://www.htmadvisory.org",
-            "http://localhost:5173",
-            "http://localhost:5174"
+            "http://localhost:*"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
