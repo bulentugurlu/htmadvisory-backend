@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-create-users-collection
+      author: platform-team
+      changes:
+        - createCollection:
+            collectionName: users

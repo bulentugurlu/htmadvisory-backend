@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 015-create-users-email-index
+      author: platform-team
+      changes:
+        - createIndex:
+            collectionName: users
+            indexName: idx_users_email_unique
+            keys: '{ "email": 1 }'
+            options: '{ "unique": true, "name": "idx_users_email_unique" }'

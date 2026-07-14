@@ -25,3 +25,9 @@ databaseChangeLog:
       file: db/changelog/012-create-contacts-collection.yaml
   - include:
       file: db/changelog/013-create-contacts-email-index.yaml
+  - include:
+      file: db/changelog/014-create-users-collection.yaml
+  - include:
+      file: db/changelog/015-create-users-email-index.yaml
+  - include:
+      file: db/changelog/016-create-users-personid-index.yaml

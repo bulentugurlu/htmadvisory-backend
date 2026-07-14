@@ -18,6 +18,12 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * JWT later without touching any controller code. See ARCHITECTURE.md,
  * "Environment-Scoped API Security Tokens" for the full rationale.
  *
+ * <p><strong>Update (auth domain landed):</strong> when member-portal JWTs
+ * were added, they did NOT replace this interceptor — the two now run
+ * side by side and check different things (this: "is the caller our
+ * frontend", {@code auth.JwtAuthInterceptor}: "which logged-in member is
+ * this"). See that class's Javadoc if you're wondering why both exist.
+ *
  * <p><strong>Token value:</strong> injected from the {@code HTM_ENV_TOKEN}
  * environment variable (via GCP Secret Manager at deploy time). Never
  * hardcoded, never committed to source, never set in {@code application-*.yml}.

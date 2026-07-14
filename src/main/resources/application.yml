@@ -53,3 +53,18 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+htm:
+  jwt:
+    # Same convention as spring.datasource.password above: a checked-in,
+    # non-secret default so `mvn test` and local dev work with zero setup,
+    # overridden by the real value (GCP Secret Manager, JWT_SECRET) in every
+    # deployed environment. NEVER left as this default in prod — anyone with
+    # this string can forge a valid session for any user, including ADMIN.
+    # An empty/absent default was tried and rejected: it fails Spring context
+    # startup, which breaks every @WebMvcTest slice (any test that pulls in
+    # WebMvcConfig's interceptors) and the shared Testcontainers integration
+    # context, not just auth's own tests.
+    secret: ${JWT_SECRET:htm-advisory-default-insecure-jwt-secret-change-in-production-via-JWT_SECRET}
+    # How long a login session stays valid before the member must log in again.
+    expiration-hours: 168 # 7 days

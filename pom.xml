@@ -114,6 +114,13 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Playwright headless browser for audit page fetching -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>1.44.0</version>
+        </dependency>
+
         <!-- Jackson for JSON parsing in ClaudeAuditEnricher -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

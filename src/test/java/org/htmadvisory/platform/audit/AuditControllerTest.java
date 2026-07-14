@@ -1,6 +1,7 @@
 package org.htmadvisory.platform.audit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.htmadvisory.platform.auth.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -26,6 +27,14 @@ class AuditControllerTest {
 
     @MockBean
     private AuditService auditService;
+
+    // Not used by any audit test, but required: WebMvcConfig now registers
+    // JwtAuthInterceptor globally, and @WebMvcTest whitelists HandlerInterceptor
+    // beans without pulling in their own @Service dependencies. Every
+    // @WebMvcTest slice in the app needs this mock for context startup to
+    // succeed — see JwtAuthInterceptor's Javadoc.
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void runAudit_returns202_withAuditId() throws Exception {
