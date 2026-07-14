@@ -93,7 +93,11 @@ class UserServiceTest {
     void register_shouldResolvePersonWithCorrectEmailAndName() {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         when(personService.findOrCreateByEmail(anyString(), anyString())).thenReturn(mockPerson);
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
 
         userService.register(validRegisterRequest);
 
@@ -104,7 +108,11 @@ class UserServiceTest {
     void register_shouldCreateProfileWithCompanyAndTitle() {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         when(personService.findOrCreateByEmail(anyString(), anyString())).thenReturn(mockPerson);
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
 
         userService.register(validRegisterRequest);
 
@@ -115,7 +123,11 @@ class UserServiceTest {
     void register_shouldSaveUserAsPendingWithHashedPassword() {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         when(personService.findOrCreateByEmail(anyString(), anyString())).thenReturn(mockPerson);
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
 
         User result = userService.register(validRegisterRequest);
 
@@ -205,6 +217,7 @@ class UserServiceTest {
         String realHash = new BCryptPasswordEncoder().encode("password123");
         User user = UserTestDataBuilder.aUser().withPersonId("person-1").withStatus(UserStatus.APPROVED)
                 .withPasswordHash(realHash).build();
+        user.setId("user-1");
         when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
 
         userService.login(loginRequest("jane@example.com", "password123"));
@@ -219,7 +232,11 @@ class UserServiceTest {
         User user = UserTestDataBuilder.aUser().withStatus(UserStatus.PENDING).build();
         user.setId("user-1");
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
         when(personRepository.findById(anyString())).thenReturn(Optional.of(mockPerson));
         when(profileRepository.findByPersonId(anyString())).thenReturn(Optional.empty());
 
@@ -234,7 +251,11 @@ class UserServiceTest {
         User user = UserTestDataBuilder.aUser().withPersonId("person-1").build();
         user.setId("user-1");
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
         when(personRepository.findById(anyString())).thenReturn(Optional.of(mockPerson));
         when(profileRepository.findByPersonId(anyString())).thenReturn(Optional.empty());
 
