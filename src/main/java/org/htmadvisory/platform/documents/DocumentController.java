@@ -92,9 +92,16 @@ public class DocumentController {
 
         StreamingResponseBody body = outputStream -> blob.downloadTo(outputStream);
 
+        // PDFs get a real in-tab preview. Everything else (.docx, .pptx)
+        // still forces a download — browsers don't render Office formats
+        // natively, so "inline" for those would either fail silently or
+        // trigger a confusing "how do you want to open this" prompt
+        // instead of the clean download experience "attachment" gives.
+        String dispositionType = "application/pdf".equals(doc.contentType()) ? "inline" : "attachment";
+
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(doc.contentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + doc.gcsObjectName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, dispositionType + "; filename=\"" + doc.gcsObjectName() + "\"")
                 .body(body);
     }
 }

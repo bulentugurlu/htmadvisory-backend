@@ -49,6 +49,11 @@ class DocumentControllerTest {
             "Multi-Environment Architecture Specification",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
+    private static final PrivateDocument SEO_GEO_BRIEF = new PrivateDocument(
+            "seo-geo-brief", "HTM_Advisory_SEO_GEO_Brief.pdf",
+            "Is Your Company Invisible to AI? SEO & GEO for CEOs",
+            "application/pdf");
+
     // ── request-download (behind JwtAuthInterceptor) ───────────────────────
 
     @Test
@@ -108,7 +113,30 @@ class DocumentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         org.hamcrest.Matchers.containsString("HTM_Advisory_Architecture_Specification.docx")))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.startsWith("attachment")))
                 .andExpect(content().bytes(fakeFileBytes));
+    }
+
+    @Test
+    void download_shouldUseInlineDispositionForPdfs() throws Exception {
+        when(tokenService.validateAndExtractDocId("pdf-token")).thenReturn("seo-geo-brief");
+        when(catalog.findById("seo-geo-brief")).thenReturn(Optional.of(SEO_GEO_BRIEF));
+
+        Blob blob = org.mockito.Mockito.mock(Blob.class);
+        byte[] fakePdfBytes = "fake pdf bytes".getBytes();
+        doAnswer(invocation -> {
+            java.io.OutputStream out = invocation.getArgument(0);
+            out.write(fakePdfBytes);
+            return null;
+        }).when(blob).downloadTo(any(java.io.OutputStream.class));
+        when(storageService.fetch("HTM_Advisory_SEO_GEO_Brief.pdf")).thenReturn(blob);
+
+        mockMvc.perform(get("/api/documents/private/download").param("token", "pdf-token"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.startsWith("inline")))
+                .andExpect(content().bytes(fakePdfBytes));
     }
 
     @Test

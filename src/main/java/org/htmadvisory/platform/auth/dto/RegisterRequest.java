@@ -11,6 +11,14 @@ import jakarta.validation.constraints.Size;
  * convention as {@code ContactInquiryRequest.company} — but strongly
  * encouraged since this is a CEO-facing member portal and admins use them
  * to decide who to approve.
+ *
+ * <p>{@code consentMarketing} is the ONLY consent captured here that's a
+ * real choice — communications consent itself isn't a separate field
+ * because it's implied by completing registration at all (the frontend
+ * makes that checkbox mandatory to submit). Both get recorded as separate
+ * {@code ConsentRecord} entries in {@code UserService.register()} — see
+ * that method for why consent lives in its own domain rather than as
+ * fields on User.
  */
 public class RegisterRequest {
 
@@ -28,6 +36,8 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
+
+    private boolean consentMarketing;
 
     public RegisterRequest() {
     }
@@ -70,5 +80,13 @@ public class RegisterRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public boolean isConsentMarketing() {
+        return consentMarketing;
+    }
+
+    public void setConsentMarketing(boolean consentMarketing) {
+        this.consentMarketing = consentMarketing;
     }
 }

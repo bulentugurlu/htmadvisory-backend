@@ -2,6 +2,7 @@ package org.htmadvisory.platform.auth;
 
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
+import org.htmadvisory.platform.consent.ConsentService;
 import org.htmadvisory.platform.people.Person;
 import org.htmadvisory.platform.people.PersonRepository;
 import org.htmadvisory.platform.people.PersonService;
@@ -55,6 +56,9 @@ class UserServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private ConsentService consentService;
 
     @InjectMocks
     private UserService userService;
@@ -152,6 +156,42 @@ class UserServiceTest {
 
         verify(personService).recordEngagement(
                 eq("person-1"), eq("auth"), eq("registered"), any(Map.class));
+    }
+
+    @Test
+    void register_shouldRecordBothConsentTypes() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(personService.findOrCreateByEmail(anyString(), anyString())).thenReturn(mockPerson);
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
+        validRegisterRequest.setConsentMarketing(true);
+
+        userService.register(validRegisterRequest);
+
+        // Communications consent is always true — implied by submitting the
+        // form at all, per the mandatory checkbox on the frontend.
+        verify(consentService).recordConsent("person-1", "communications", true, "account_registration");
+        // Marketing reflects whatever the checkbox was actually set to.
+        verify(consentService).recordConsent("person-1", "marketing", true, "account_registration");
+    }
+
+    @Test
+    void register_shouldRecordMarketingConsentAsFalseWhenNotOptedIn() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(personService.findOrCreateByEmail(anyString(), anyString())).thenReturn(mockPerson);
+        when(userRepository.save(any())).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            u.setId("user-1");
+            return u;
+        });
+        // validRegisterRequest.consentMarketing defaults to false — not set here.
+
+        userService.register(validRegisterRequest);
+
+        verify(consentService).recordConsent("person-1", "marketing", false, "account_registration");
     }
 
     // ── login ────────────────────────────────────────────────────────────

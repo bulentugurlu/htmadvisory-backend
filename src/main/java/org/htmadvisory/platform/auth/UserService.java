@@ -3,6 +3,7 @@ package org.htmadvisory.platform.auth;
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
 import org.htmadvisory.platform.auth.dto.UserProfileResponse;
+import org.htmadvisory.platform.consent.ConsentService;
 import org.htmadvisory.platform.people.Person;
 import org.htmadvisory.platform.people.PersonRepository;
 import org.htmadvisory.platform.people.PersonService;
@@ -27,6 +28,14 @@ import java.util.Optional;
  * also write to {@code profile} since registration is the richest signup
  * moment we have.
  *
+ * <p>Consent is captured exactly once, here, rather than being re-asked on
+ * every subsequent action a member takes (e.g. every whitepaper download —
+ * that used to be the flow, and it was repetitive and pointless for a
+ * known, already-approved member). It's recorded via the existing {@code
+ * consent} domain rather than as fields on User, matching this codebase's
+ * pattern of consent living in its own append-only, auditable domain keyed
+ * by personId — see {@code ConsentRecord}'s Javadoc for why.
+ *
  * <p>Errors are surfaced as {@link ResponseStatusException} directly from
  * this service — there's no {@code @ControllerAdvice} in this codebase yet,
  * so this keeps error mapping in one place per failure without introducing
@@ -35,12 +44,20 @@ import java.util.Optional;
 @Service
 public class UserService {
 
+    /** Required to register — implied by submitting the form at all, but
+     *  still recorded as an explicit, auditable consent event. */
+    private static final String CONSENT_TYPE_COMMUNICATIONS = "communications";
+    /** Optional — the one real choice on the registration form. */
+    private static final String CONSENT_TYPE_MARKETING = "marketing";
+    private static final String CONSENT_SOURCE = "account_registration";
+
     private final UserRepository userRepository;
     private final PersonRepository personRepository;
     private final ProfileRepository profileRepository;
     private final PersonService personService;
     private final ProfileService profileService;
     private final JwtService jwtService;
+    private final ConsentService consentService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public UserService(UserRepository userRepository,
@@ -48,13 +65,15 @@ public class UserService {
                         ProfileRepository profileRepository,
                         PersonService personService,
                         ProfileService profileService,
-                        JwtService jwtService) {
+                        JwtService jwtService,
+                        ConsentService consentService) {
         this.userRepository = userRepository;
         this.personRepository = personRepository;
         this.profileRepository = profileRepository;
         this.personService = personService;
         this.profileService = profileService;
         this.jwtService = jwtService;
+        this.consentService = consentService;
     }
 
     /**
@@ -84,6 +103,12 @@ public class UserService {
 
         // Step 4 — cross-domain engagement
         personService.recordEngagement(person.getId(), "auth", "registered", Map.of("userId", user.getId()));
+
+        // Step 5 — consent, captured once here rather than re-asked later.
+        // Communications consent is always true at this point — the
+        // frontend makes that checkbox mandatory to submit the form.
+        consentService.recordConsent(person.getId(), CONSENT_TYPE_COMMUNICATIONS, true, CONSENT_SOURCE);
+        consentService.recordConsent(person.getId(), CONSENT_TYPE_MARKETING, request.isConsentMarketing(), CONSENT_SOURCE);
 
         return user;
     }

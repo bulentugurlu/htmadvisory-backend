@@ -3,6 +3,7 @@ package org.htmadvisory.platform.auth;
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
 import org.htmadvisory.platform.auth.dto.UserProfileResponse;
+import org.htmadvisory.platform.consent.ConsentRepository;
 import org.htmadvisory.platform.people.EngagementRepository;
 import org.htmadvisory.platform.people.PersonRepository;
 import org.htmadvisory.platform.profile.ProfileRepository;
@@ -22,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Integration tests for {@link UserService}, run against a real, throwaway
  * MongoDB instance (see {@link AbstractMongoIntegrationTest}). Exercises the
  * full register → approve → login flow end-to-end, including the
- * cross-domain Person/Profile writes.
+ * cross-domain Person/Profile/Consent writes.
  */
 class UserServiceIntegrationTest extends AbstractMongoIntegrationTest {
 
@@ -41,12 +42,16 @@ class UserServiceIntegrationTest extends AbstractMongoIntegrationTest {
     @Autowired
     private EngagementRepository engagementRepository;
 
+    @Autowired
+    private ConsentRepository consentRepository;
+
     @BeforeEach
     void setUp() {
         userRepository.deleteAll();
         personRepository.deleteAll();
         profileRepository.deleteAll();
         engagementRepository.deleteAll();
+        consentRepository.deleteAll();
     }
 
     @Test
@@ -86,6 +91,26 @@ class UserServiceIntegrationTest extends AbstractMongoIntegrationTest {
                     assertThat(e.getDomain()).isEqualTo("auth");
                     assertThat(e.getType()).isEqualTo("registered");
                 });
+    }
+
+    @Test
+    void register_shouldPersistBothConsentRecords() {
+        User user = userService.register(registerRequest("consenting@example.com"));
+
+        assertThat(consentRepository.findByPersonId(user.getPersonId())).hasSize(2);
+
+        assertThat(consentRepository.findFirstByPersonIdAndConsentTypeOrderByRecordedAtDesc(
+                user.getPersonId(), "communications"))
+                .isPresent()
+                .get()
+                .satisfies(c -> assertThat(c.isGranted()).isTrue());
+
+        // registerRequest() sets consentMarketing(true), so this should be granted too.
+        assertThat(consentRepository.findFirstByPersonIdAndConsentTypeOrderByRecordedAtDesc(
+                user.getPersonId(), "marketing"))
+                .isPresent()
+                .get()
+                .satisfies(c -> assertThat(c.isGranted()).isTrue());
     }
 
     @Test
@@ -163,6 +188,7 @@ class UserServiceIntegrationTest extends AbstractMongoIntegrationTest {
         req.setCompany("Acme Corp");
         req.setTitle("CEO");
         req.setPassword("password123");
+        req.setConsentMarketing(true);
         return req;
     }
 
