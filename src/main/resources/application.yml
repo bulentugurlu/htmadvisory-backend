@@ -68,3 +68,19 @@ htm:
     secret: ${JWT_SECRET:htm-advisory-default-insecure-jwt-secret-change-in-production-via-JWT_SECRET}
     # How long a login session stays valid before the member must log in again.
     expiration-hours: 168 # 7 days
+  documents:
+    # GCS bucket holding member-only documents — deliberately a SEPARATE
+    # bucket from the public one (htmadvisory-whitepapers), not a "private/"
+    # folder within it. GCS access control is bucket-scoped when uniform
+    # bucket-level access is on (mandatory here via org policy), so a
+    # folder prefix within one bucket cannot be locked down independently
+    # of the rest of that bucket's contents.
+    private-bucket: ${DOCUMENTS_PRIVATE_BUCKET:htmadvisory-whitepapers-private}
+    # This backend's own public URL, used to build the download link
+    # embedded in delivery emails. Must be set explicitly per environment —
+    # a Cloud Run instance doesn't know its own external URL from inside
+    # the running container.
+    backend-base-url: ${DOCUMENTS_BACKEND_BASE_URL:http://localhost:8080}
+    # How long a one-time download link stays valid after being requested.
+    # Short on purpose — this is a bearer credential embedded in an email.
+    download-token-expiration-minutes: 15

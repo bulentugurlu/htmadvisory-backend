@@ -15,11 +15,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *
  * <p>{@link JwtAuthInterceptor} is layered on top of that (both run, in
  * registration order) for the routes that additionally need to know which
- * logged-in member is calling: {@code /api/auth/me} and everything under
+ * logged-in member is calling: {@code /api/auth/me}, everything under
  * {@code /api/admin/**} (which the interceptor also restricts to ADMIN
- * role — see its Javadoc). {@code /api/auth/register} and {@code
- * /api/auth/login} are intentionally NOT in this list — they must be
- * reachable by a logged-out visitor.
+ * role — see its Javadoc), and {@code /api/documents/private/{docId}/request-download}
+ * (any approved member, not ADMIN-only). {@code /api/auth/register},
+ * {@code /api/auth/login}, and {@code /api/documents/private/download} are
+ * intentionally NOT in this list — they must be reachable without a
+ * session token (the last one is opened from an email and carries its own
+ * single-purpose token instead; see {@code documents.DocumentController}).
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
@@ -39,6 +42,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**");
 
         registry.addInterceptor(jwtAuthInterceptor)
-                .addPathPatterns("/api/auth/me", "/api/admin/**");
+                .addPathPatterns("/api/auth/me", "/api/admin/**", "/api/documents/private/*/request-download");
     }
 }
