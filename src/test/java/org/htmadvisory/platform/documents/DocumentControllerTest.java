@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Optional;
 
@@ -16,11 +17,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(DocumentController.class)
@@ -109,7 +112,18 @@ class DocumentControllerTest {
         }).when(blob).downloadTo(any(java.io.OutputStream.class));
         when(storageService.fetch("HTM_Advisory_Architecture_Specification.docx")).thenReturn(blob);
 
-        mockMvc.perform(get("/api/documents/private/download").param("token", "good-token"))
+        // StreamingResponseBody runs on a separate async thread — reading
+        // the response before that completes (as a plain single perform()
+        // call does) is a genuine race, not a guaranteed pass. It happened
+        // to pass locally by luck of thread timing and failed in CI on
+        // different hardware. MockMvc's async pattern (confirm async
+        // started, THEN dispatch and assert on that result) waits for the
+        // real completion instead of racing it.
+        MvcResult mvcResult = mockMvc.perform(get("/api/documents/private/download").param("token", "good-token"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         org.hamcrest.Matchers.containsString("HTM_Advisory_Architecture_Specification.docx")))
@@ -132,7 +146,12 @@ class DocumentControllerTest {
         }).when(blob).downloadTo(any(java.io.OutputStream.class));
         when(storageService.fetch("HTM_Advisory_SEO_GEO_Brief.pdf")).thenReturn(blob);
 
-        mockMvc.perform(get("/api/documents/private/download").param("token", "pdf-token"))
+        // Same async-race fix as the test above — see its comment.
+        MvcResult mvcResult = mockMvc.perform(get("/api/documents/private/download").param("token", "pdf-token"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         org.hamcrest.Matchers.startsWith("inline")))
