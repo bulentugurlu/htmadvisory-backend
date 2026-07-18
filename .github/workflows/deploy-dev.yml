@@ -74,7 +74,7 @@ jobs:
             --region=us-central1 \
             --platform=managed \
             --no-allow-unauthenticated \
-            --set-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI,POSTGRESQL_URL=$POSTGRESQL_URL,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD,ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" \
+            --update-env-vars="SPRING_PROFILES_ACTIVE=dev,MONGODB_URI=$MONGODB_URI,POSTGRESQL_URL=$POSTGRESQL_URL,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD,ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY,DOCUMENTS_BACKEND_BASE_URL=https://htmadvisory-backend-dev-2ftqzkl3nq-uc.a.run.app" \
             --memory=1Gi \
             --cpu=2 \
             --cpu-boost \
