@@ -21,9 +21,9 @@ class PrivateDocumentCatalogTest {
     @Test
     void findById_shouldResolveEachKnownIdToItsRealGcsObjectName() {
         assertThat(catalog.findById("arch-spec")).get()
-                .satisfies(d -> assertThat(d.gcsObjectName()).isEqualTo("HTM_Advisory_Architecture_Specification.docx"));
+                .satisfies(d -> assertThat(d.gcsObjectName()).isEqualTo("HTM_Advisory_Architecture_Specification.pdf"));
         assertThat(catalog.findById("backend-whitepaper")).get()
-                .satisfies(d -> assertThat(d.gcsObjectName()).isEqualTo("modern-backend-engineering-whitepaper.docx"));
+                .satisfies(d -> assertThat(d.gcsObjectName()).isEqualTo("modern-backend-engineering-whitepaper.pdf"));
         assertThat(catalog.findById("seo-geo-brief")).get()
                 .satisfies(d -> assertThat(d.gcsObjectName()).isEqualTo("HTM_Advisory_SEO_GEO_Brief.pdf"));
     }

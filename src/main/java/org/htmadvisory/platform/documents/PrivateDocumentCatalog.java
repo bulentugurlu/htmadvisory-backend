@@ -30,34 +30,32 @@ public class PrivateDocumentCatalog {
     private static Map<String, PrivateDocument> buildCatalog() {
         Map<String, PrivateDocument> docs = new LinkedHashMap<>();
 
-        String docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        String pptx = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
         String pdf = "application/pdf";
 
         docs.put("arch-spec", new PrivateDocument(
-                "arch-spec", "HTM_Advisory_Architecture_Specification.docx",
-                "Multi-Environment Architecture Specification", docx));
+                "arch-spec", "HTM_Advisory_Architecture_Specification.pdf",
+                "Multi-Environment Architecture Specification", pdf));
         docs.put("arch-deck", new PrivateDocument(
-                "arch-deck", "HTM_Advisory_Architecture_Presentation.pptx",
-                "Multi-Environment Architecture Deck", pptx));
+                "arch-deck", "HTM_Advisory_Architecture_Presentation.pdf",
+                "Multi-Environment Architecture Deck", pdf));
         docs.put("gcp-training", new PrivateDocument(
-                "gcp-training", "HTM_Advisory_GCP_Deployment_Training.pptx",
-                "GCP Deployment Training", pptx));
+                "gcp-training", "HTM_Advisory_GCP_Deployment_Training.pdf",
+                "GCP Deployment Training", pdf));
         docs.put("training-deck", new PrivateDocument(
-                "training-deck", "HTM_Advisory_Training_Presentation.pptx",
-                "AI Engineering Training Presentation", pptx));
+                "training-deck", "HTM_Advisory_Training_Presentation.pdf",
+                "AI Engineering Training Presentation", pdf));
         docs.put("backend-whitepaper", new PrivateDocument(
-                "backend-whitepaper", "modern-backend-engineering-whitepaper.docx",
-                "Modern Backend Engineering: CI/CD, Containerization & Cloud", docx));
+                "backend-whitepaper", "modern-backend-engineering-whitepaper.pdf",
+                "Modern Backend Engineering: CI/CD, Containerization & Cloud", pdf));
         docs.put("backend-deck", new PrivateDocument(
-                "backend-deck", "modern-backend-engineering.pptx",
-                "Modern Backend Engineering Deck", pptx));
+                "backend-deck", "modern-backend-engineering.pdf",
+                "Modern Backend Engineering Deck", pdf));
         docs.put("seo-geo-brief", new PrivateDocument(
                 "seo-geo-brief", "HTM_Advisory_SEO_GEO_Brief.pdf",
                 "Is Your Company Invisible to AI? SEO & GEO for CEOs", pdf));
         docs.put("seo-geo-deck", new PrivateDocument(
-                "seo-geo-deck", "HTM_Advisory_SEO_GEO_Overview.pptx",
-                "SEO & GEO Visibility — CEO Consulting Overview", pptx));
+                "seo-geo-deck", "HTM_Advisory_SEO_GEO_Overview.pdf",
+                "SEO & GEO Visibility — CEO Consulting Overview", pdf));
 
         return Collections.unmodifiableMap(docs);
     }
