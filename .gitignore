@@ -21,3 +21,4 @@ target/
 application-local.yml
 github-actions-key.json
 .claude/
+whitepapers/
