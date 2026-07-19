@@ -5,6 +5,40 @@
 > complete build order — see the `CLAUDE.md` in the `htmadvisory` (frontend)
 > repo. This file is intentionally lightweight and backend-specific only.
 
+## Open Items — Pick Up Here Next Session (as of 2026-07-19)
+
+Registration confirmation email, admin approval page, and forgot/reset
+password are all DONE and confirmed working end-to-end in production
+(not just tested locally). Next up, roughly in priority order:
+
+1. **Slide 15** in `HTM_Advisory_GCP_Deployment_Training.pptx` (source
+   lives in `~/htmadvisory-documents/source/`) still needs splitting into
+   two slides — content genuinely exceeds one slide's physical space
+   (deploy command + success output on one, the 3-step "403 Forbidden"
+   fix on the other). Needs a human content decision, not a layout fix.
+2. **OTP (email + SMS via Twilio)** — blocked on the maintainer
+   completing Twilio signup (Account SID, Auth Token, a from-number) and
+   reCAPTCHA v3 signup (site key + secret key). Applies to both
+   registration and every login per the locked-in decision. No phone
+   number field exists yet on registration — needs adding, required only
+   if SMS is chosen as the OTP channel.
+3. **CAPTCHA (reCAPTCHA v3)** — same signup blocker as above.
+4. **Admin portal expansion** — metrics/daily-activity dashboard,
+   outbound messaging to members, inbound inquiry handling (Contact form
+   submissions). Deliberately scoped as its own future project, separate
+   from the approval page already built — each of these three is
+   independently sizable.
+
+**Smaller, non-blocking technical debt, still open:**
+- `JWT_SECRET` on the deployed backend still uses the insecure
+  checked-in default — should move to GCP Secret Manager.
+- `server.error.include-message` still not enabled — specific backend
+  error messages don't reach the frontend, only generic ones.
+
+**Worth doing soon, not just "someday":** the MongoDB Atlas password and
+an old Anthropic API key have been sitting in plaintext in chat history
+since early in this project and still haven't been rotated.
+
 ## What This Repo Is
 
 Spring Boot backend service for the HTM Advisory platform. Companion to
@@ -732,3 +766,53 @@ first time the full document set has been confirmed end-to-end
 consistent — if a future session finds a document that looks
 off-brand or contains a McKinsey reference, it's a regression from this
 known-good state, not a lingering original issue.
+
+## Admin Approval Page (as of 2026-07-19)
+
+`/admin` in the frontend — lists PENDING registrations, one-click approve,
+calls the `AdminUserController` endpoints that had existed since Phase III
+with no UI on top of them until now. Role-gated at two independent layers:
+`Admin.jsx` hides the page/nav card from non-admins (UX only), and
+`JwtAuthInterceptor` rejects any `/api/admin/**` request whose JWT role
+claim isn't `ADMIN` with a 403 — verified by reading the interceptor
+directly, not assumed. The frontend check can be bypassed by anyone
+technical; the backend one can't, since the role comes from a signed JWT
+claim, not anything the client sends.
+
+Approving a user is also the only trigger point for the "approved"
+confirmation email — see Registration & Password Emails below.
+
+## Registration & Password Emails (as of 2026-07-19)
+
+Registration confirmation, admin-approval confirmation, and password-reset
+emails all share ONE EmailJS template (`template_g30c23n`, "Registration
+Status") rather than one template per email type — explicit direction:
+don't create a new template per state. The template has generic
+variable-driven slots (`status_eyebrow`, `status_headline`,
+`status_message`, `cta_text`, `cta_url`, `email_subject`) and the calling
+code supplies different values per state. `Register.jsx`, `Admin.jsx`, and
+`ForgotPassword.jsx` all reference this same template ID — if a 4th
+email-triggering state is ever added, extend this same template rather
+than creating a new one, matching the established pattern.
+
+**Password reset specifically** — `PasswordResetTokenService` mirrors
+`DocumentDownloadTokenService`'s short-lived signed-token pattern, with
+one addition: single-use enforcement via `User.passwordResetTokenVersion`,
+an integer that increments on every successful reset. A token embeds the
+version it was minted against; if that no longer matches the user's
+current version (because it was already used, or a newer reset was
+requested since), it's rejected even though it hasn't expired. This is
+the standard way to get single-use semantics out of an otherwise-stateless
+JWT without a separate token-storage collection.
+
+`/api/auth/forgot-password` always returns the same generic message
+regardless of whether the email is registered — enumeration resistance,
+same principle as login's identical "invalid email or password" for both
+a wrong password and an unknown email. `resetToken`/`name` are only
+present in the response when a real, APPROVED account matched; the
+frontend must never let that presence/absence become visible in the UI
+(it doesn't — same success message either way). This does mean the reset
+token briefly exists in the browser, since EmailJS sends are client-side
+and there's no backend email capability in this codebase — a real,
+deliberate architectural tradeoff, not an oversight. HTTPS protects it in
+transit; the token is short-lived (30 min) and single-use.
