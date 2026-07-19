@@ -1,8 +1,12 @@
 package org.htmadvisory.platform.auth;
 
+import org.htmadvisory.platform.auth.dto.ForgotPasswordRequest;
+import org.htmadvisory.platform.auth.dto.ForgotPasswordResponse;
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
+import org.htmadvisory.platform.auth.dto.ResetPasswordRequest;
 import org.htmadvisory.platform.consent.ConsentService;
+import io.jsonwebtoken.JwtException;
 import org.htmadvisory.platform.people.Person;
 import org.htmadvisory.platform.people.PersonRepository;
 import org.htmadvisory.platform.people.PersonService;
@@ -56,6 +60,9 @@ class UserServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private PasswordResetTokenService passwordResetTokenService;
 
     @Mock
     private ConsentService consentService;
@@ -304,6 +311,122 @@ class UserServiceTest {
         verify(personService).recordEngagement(eq("person-1"), eq("auth"), eq("approved"), any(Map.class));
     }
 
+    // ── forgot password ──────────────────────────────────────────────────
+
+    @Test
+    void forgotPassword_shouldReturnGenericMessageAndNoTokenWhenEmailNotFound() {
+        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+
+        ForgotPasswordResponse response = userService.forgotPassword(forgotPasswordRequest("missing@example.com"));
+
+        assertThat(response.getMessage()).isEqualTo("If that email is registered, a password reset link has been sent.");
+        assertThat(response.getResetToken()).isNull();
+        assertThat(response.getName()).isNull();
+    }
+
+    @Test
+    void forgotPassword_shouldReturnSameGenericMessageWhenAccountPending() {
+        User user = UserTestDataBuilder.aUser().withStatus(UserStatus.PENDING).build();
+        when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
+
+        ForgotPasswordResponse response = userService.forgotPassword(forgotPasswordRequest("jane@example.com"));
+
+        assertThat(response.getMessage()).isEqualTo("If that email is registered, a password reset link has been sent.");
+        assertThat(response.getResetToken()).isNull();
+    }
+
+    @Test
+    void forgotPassword_shouldReturnTokenAndNameWhenApproved() {
+        User user = UserTestDataBuilder.aUser().withPersonId("person-1").withStatus(UserStatus.APPROVED).build();
+        user.setId("user-1");
+        when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(personRepository.findById("person-1")).thenReturn(Optional.of(mockPerson));
+        when(passwordResetTokenService.generateToken("user-1", 0)).thenReturn("reset-token-abc");
+
+        ForgotPasswordResponse response = userService.forgotPassword(forgotPasswordRequest("jane@example.com"));
+
+        assertThat(response.getResetToken()).isEqualTo("reset-token-abc");
+        assertThat(response.getName()).isEqualTo("Jane Doe");
+    }
+
+    @Test
+    void forgotPassword_shouldRecordEngagementWhenApproved() {
+        User user = UserTestDataBuilder.aUser().withPersonId("person-1").withStatus(UserStatus.APPROVED).build();
+        user.setId("user-1");
+        when(userRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(personRepository.findById("person-1")).thenReturn(Optional.of(mockPerson));
+
+        userService.forgotPassword(forgotPasswordRequest("jane@example.com"));
+
+        verify(personService).recordEngagement(eq("person-1"), eq("auth"), eq("password_reset_requested"), any(Map.class));
+    }
+
+    // ── reset password ───────────────────────────────────────────────────
+
+    @Test
+    void resetPassword_shouldThrowUnauthorizedWhenTokenInvalid() {
+        when(passwordResetTokenService.validateAndExtractClaims("bad-token"))
+                .thenThrow(new JwtException("bad signature"));
+
+        assertThatThrownBy(() -> userService.resetPassword(resetPasswordRequest("bad-token", "newPassword123")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("invalid or has expired");
+    }
+
+    @Test
+    void resetPassword_shouldThrowUnauthorizedWhenUserMissing() {
+        when(passwordResetTokenService.validateAndExtractClaims("token"))
+                .thenReturn(new PasswordResetTokenService.ResetTokenClaims("missing-user", 0));
+        when(userRepository.findById("missing-user")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.resetPassword(resetPasswordRequest("token", "newPassword123")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("invalid or has expired");
+    }
+
+    @Test
+    void resetPassword_shouldThrowUnauthorizedWhenTokenVersionStale() {
+        User user = UserTestDataBuilder.aUser().build();
+        user.setId("user-1");
+        user.setPasswordResetTokenVersion(2); // already used, or a newer link was requested since
+        when(passwordResetTokenService.validateAndExtractClaims("token"))
+                .thenReturn(new PasswordResetTokenService.ResetTokenClaims("user-1", 1)); // stale version
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.resetPassword(resetPasswordRequest("token", "newPassword123")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("already been used");
+    }
+
+    @Test
+    void resetPassword_shouldUpdatePasswordAndIncrementVersionWhenValid() {
+        User user = UserTestDataBuilder.aUser().withPersonId("person-1").build();
+        user.setId("user-1");
+        user.setPasswordResetTokenVersion(0);
+        when(passwordResetTokenService.validateAndExtractClaims("token"))
+                .thenReturn(new PasswordResetTokenService.ResetTokenClaims("user-1", 0));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        userService.resetPassword(resetPasswordRequest("token", "brandNewPassword123"));
+
+        verify(userRepository).save(argThat(u ->
+                u.getPasswordResetTokenVersion() == 1
+                        && new BCryptPasswordEncoder().matches("brandNewPassword123", u.getPasswordHash())));
+    }
+
+    @Test
+    void resetPassword_shouldRecordEngagementOnSuccess() {
+        User user = UserTestDataBuilder.aUser().withPersonId("person-1").build();
+        user.setId("user-1");
+        when(passwordResetTokenService.validateAndExtractClaims("token"))
+                .thenReturn(new PasswordResetTokenService.ResetTokenClaims("user-1", 0));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+
+        userService.resetPassword(resetPasswordRequest("token", "brandNewPassword123"));
+
+        verify(personService).recordEngagement(eq("person-1"), eq("auth"), eq("password_reset_completed"), any(Map.class));
+    }
+
     @Test
     void findById_shouldThrowNotFoundWhenMissing() {
         when(userRepository.findById("missing")).thenReturn(Optional.empty());
@@ -319,6 +442,19 @@ class UserServiceTest {
         LoginRequest req = new LoginRequest();
         req.setEmail(email);
         req.setPassword(password);
+        return req;
+    }
+
+    private ForgotPasswordRequest forgotPasswordRequest(String email) {
+        ForgotPasswordRequest req = new ForgotPasswordRequest();
+        req.setEmail(email);
+        return req;
+    }
+
+    private ResetPasswordRequest resetPasswordRequest(String token, String newPassword) {
+        ResetPasswordRequest req = new ResetPasswordRequest();
+        req.setToken(token);
+        req.setNewPassword(newPassword);
         return req;
     }
 }

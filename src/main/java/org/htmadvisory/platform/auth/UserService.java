@@ -1,9 +1,13 @@
 package org.htmadvisory.platform.auth;
 
+import org.htmadvisory.platform.auth.dto.ForgotPasswordRequest;
+import org.htmadvisory.platform.auth.dto.ForgotPasswordResponse;
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
+import org.htmadvisory.platform.auth.dto.ResetPasswordRequest;
 import org.htmadvisory.platform.auth.dto.UserProfileResponse;
 import org.htmadvisory.platform.consent.ConsentService;
+import io.jsonwebtoken.JwtException;
 import org.htmadvisory.platform.people.Person;
 import org.htmadvisory.platform.people.PersonRepository;
 import org.htmadvisory.platform.people.PersonService;
@@ -57,6 +61,7 @@ public class UserService {
     private final PersonService personService;
     private final ProfileService profileService;
     private final JwtService jwtService;
+    private final PasswordResetTokenService passwordResetTokenService;
     private final ConsentService consentService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -66,6 +71,7 @@ public class UserService {
                         PersonService personService,
                         ProfileService profileService,
                         JwtService jwtService,
+                        PasswordResetTokenService passwordResetTokenService,
                         ConsentService consentService) {
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -73,6 +79,7 @@ public class UserService {
         this.personService = personService;
         this.profileService = profileService;
         this.jwtService = jwtService;
+        this.passwordResetTokenService = passwordResetTokenService;
         this.consentService = consentService;
     }
 
@@ -143,6 +150,69 @@ public class UserService {
 
     /** Token + the User it was issued for. See {@link #login(LoginRequest)}. */
     public record LoginResult(String token, User user) {}
+
+    private static final String GENERIC_FORGOT_PASSWORD_MESSAGE =
+            "If that email is registered, a password reset link has been sent.";
+
+    /**
+     * Always returns the same generic message regardless of whether the
+     * email is registered — see {@link ForgotPasswordResponse}'s Javadoc
+     * for the full reasoning. Only populates {@code resetToken}/{@code
+     * name} when a real account was found; the controller/frontend must
+     * not branch on anything else in this response.
+     *
+     * <p>Silently does nothing (still returns the generic message) for a
+     * PENDING or REJECTED account — there's no password to reset access
+     * to yet, and confirming account status here would reopen the same
+     * enumeration concern this method exists to avoid.
+     */
+    public ForgotPasswordResponse forgotPassword(ForgotPasswordRequest request) {
+        Optional<User> maybeUser = userRepository.findByEmail(request.getEmail());
+        if (maybeUser.isEmpty() || maybeUser.get().getStatus() != UserStatus.APPROVED) {
+            return new ForgotPasswordResponse(GENERIC_FORGOT_PASSWORD_MESSAGE, null, null);
+        }
+
+        User user = maybeUser.get();
+        String token = passwordResetTokenService.generateToken(user.getId(), user.getPasswordResetTokenVersion());
+        Person person = personRepository.findById(user.getPersonId()).orElse(null);
+        String name = person != null ? person.getName() : null;
+
+        personService.recordEngagement(user.getPersonId(), "auth", "password_reset_requested", Map.of("userId", user.getId()));
+
+        return new ForgotPasswordResponse(GENERIC_FORGOT_PASSWORD_MESSAGE, token, name);
+    }
+
+    /**
+     * Validates the reset token (signature, expiry, purpose, AND that its
+     * embedded version still matches the user's current {@code
+     * passwordResetTokenVersion} — see {@link PasswordResetTokenService}'s
+     * Javadoc for why that comparison lives here rather than in the token
+     * service itself), then updates the password and increments the
+     * version, which immediately invalidates this token and any other
+     * outstanding one for the same user.
+     */
+    public void resetPassword(ResetPasswordRequest request) {
+        PasswordResetTokenService.ResetTokenClaims claims;
+        try {
+            claims = passwordResetTokenService.validateAndExtractClaims(request.getToken());
+        } catch (JwtException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This reset link is invalid or has expired.");
+        }
+
+        User user = userRepository.findById(claims.userId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This reset link is invalid or has expired."));
+
+        if (claims.tokenVersion() != user.getPasswordResetTokenVersion()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "This reset link has already been used or a newer one was requested. Please request a new link.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordResetTokenVersion(user.getPasswordResetTokenVersion() + 1);
+        userRepository.save(user);
+
+        personService.recordEngagement(user.getPersonId(), "auth", "password_reset_completed", Map.of("userId", user.getId()));
+    }
 
     /** Builds the joined {@code User + Person + PersonProfile} view for a given user id. */
     public UserProfileResponse getProfile(String userId) {

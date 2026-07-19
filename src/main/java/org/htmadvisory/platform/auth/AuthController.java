@@ -2,10 +2,13 @@ package org.htmadvisory.platform.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.htmadvisory.platform.auth.dto.ForgotPasswordRequest;
+import org.htmadvisory.platform.auth.dto.ForgotPasswordResponse;
 import org.htmadvisory.platform.auth.dto.LoginRequest;
 import org.htmadvisory.platform.auth.dto.LoginResponse;
 import org.htmadvisory.platform.auth.dto.RegisterRequest;
 import org.htmadvisory.platform.auth.dto.RegisterResponse;
+import org.htmadvisory.platform.auth.dto.ResetPasswordRequest;
 import org.htmadvisory.platform.auth.dto.UserProfileResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +52,25 @@ public class AuthController {
     public LoginResponse login(@RequestBody @Valid LoginRequest request) {
         UserService.LoginResult result = userService.login(request);
         return new LoginResponse(result.token(), userService.getProfile(result.user().getId()));
+    }
+
+    /**
+     * Always 200 with a generic message, whether or not the email is
+     * registered — see {@code UserService.forgotPassword} and {@code
+     * ForgotPasswordResponse}'s Javadoc for the full reasoning. The
+     * frontend uses {@code resetToken} (present only for a real, approved
+     * account) purely to decide whether to fire the reset email via
+     * EmailJS — it must never surface that presence/absence to the person
+     * using the form.
+     */
+    @PostMapping("/forgot-password")
+    public ForgotPasswordResponse forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        return userService.forgotPassword(request);
+    }
+
+    @PostMapping("/reset-password")
+    public void resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+        userService.resetPassword(request);
     }
 
     /**

@@ -47,6 +47,13 @@ public class User {
     /** Null until an admin approves the account. */
     private Instant approvedAt;
 
+    /** Incremented on every successful password reset. A reset token
+     *  embeds the version it was minted against ({@link PasswordResetTokenService}),
+     *  so once used (or once a newer reset is requested), any earlier
+     *  token's embedded version no longer matches and it's rejected —
+     *  even though it hasn't expired yet. Starts at 0 for every account. */
+    private int passwordResetTokenVersion = 0;
+
     public User() {
         // Required by Spring Data MongoDB for object mapping.
     }
@@ -124,5 +131,13 @@ public class User {
 
     public void setApprovedAt(Instant approvedAt) {
         this.approvedAt = approvedAt;
+    }
+
+    public int getPasswordResetTokenVersion() {
+        return passwordResetTokenVersion;
+    }
+
+    public void setPasswordResetTokenVersion(int passwordResetTokenVersion) {
+        this.passwordResetTokenVersion = passwordResetTokenVersion;
     }
 }
