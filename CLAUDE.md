@@ -488,6 +488,27 @@ gcloud run services add-iam-policy-binding htmadvisory-backend-dev \
   --project=htmadvisory
 ```
 
+### The same root cause bit us again — env vars (2026-07-18)
+
+**This is the same underlying pattern as the IAM gotcha above, not a
+separate issue:** several `gcloud run` flags REPLACE the service's entire
+prior state instead of merging into it. `--set-env-vars` in
+`.github/workflows/deploy-dev.yml`'s deploy step is the second instance —
+it hardcodes a fixed list (`SPRING_PROFILES_ACTIVE`, `MONGODB_URI`, etc.),
+and every deploy through normal CI/CD silently wiped ANY env var not in
+that list — including `DOCUMENTS_BACKEND_BASE_URL`, set manually once via
+`gcloud run services update` and then erased by the very next automated
+deploy. Manifested as private-document download links pointing at
+`localhost:8080` in production, twice, before the root cause was found.
+
+**Fixed by switching to `--update-env-vars`** (merges instead of
+replacing) and adding `DOCUMENTS_BACKEND_BASE_URL` directly into the
+deploy step's list as belt-and-suspenders, so a from-scratch service
+rebuild has nothing to rely on merging onto. **Before adding any new env
+var to this service going forward, check whether `--set-env-vars` still
+appears anywhere in `deploy-dev.yml` — if a future edit reintroduces it,
+this will recur.**
+
 ## Frontend Integration
 
 - `VITE_API_BASE_URL` and `VITE_API_TOKEN` baked into Vite bundle via
@@ -527,30 +548,187 @@ force redeploy. If this happens again, check DATABASECHANGELOGLOCK first.
 - Endpoint: `POST /api/audits/run` (async, returns 202) + `GET /api/audits/{id}`
 - Audit types: SEO (5 auditors), Accessibility (4 auditors) — more addable
 - Frontend page: `/audit` in htmadvisory-frontend repo
-- NOT YET BUILT — brief committed, implementation pending
+- BUILT and deployed — 77/77 tests passing, confirmed live at /audit
 
-## Audit Domain — Final State (as of 2026-07-13)
+## Private Document Delivery (documents domain, as of 2026-07-18)
 
-- JSoup replaced Playwright for HTML fetching (Playwright Java driver fails in Cloud Run)
-- JSoup fetch: follow redirects, real UA string, finalUrl from response URL
-- 92/92 tests passing (77 original + 15 new audit tests)
-- htmadvisory.org audit confirmed: 100/100 Grade A (SEO + Accessibility)
-- Playwright removed from Dockerfile and pom.xml
-- Phase 2 (future): dedicated Playwright microservice as separate Cloud Run service
+Member-only documents (Whitepapers → Member Resources) are delivered via
+short-lived signed tokens, never a permanent public link. Two-endpoint
+design:
 
-## Accessibility & SEO Standards for htmadvisory.org (audit confirmed 2026-07-13)
+- `POST /api/documents/private/{docId}/request-download` — behind
+  `JwtAuthInterceptor` (any authenticated member). Mints a 15-minute,
+  single-purpose token via `DocumentDownloadTokenService` and returns a URL.
+- `GET /api/documents/private/download?token=...` — deliberately public
+  (opened from an email/link click, no session available). The token
+  itself is the credential, validated in place of a session check.
 
-- index.html has: semantic landmark elements (header/nav/main/footer with roles),
-  h1 placeholder, all meta tags, Open Graph, Schema.org, sitemap, robots.txt
-- All pages have: <nav>, role="banner" on hero div, role="main" on body div,
-  role="contentinfo" on footer div
-- Meta description: 120-160 chars max
-- Site scores 100/A on HTM Advisory audit tool (all 9 dimensions)
+Catalog lives in `PrivateDocumentCatalog.java` — a static in-memory map
+(8 known documents, not a database domain; revisit if the list starts
+changing often). `id` values there MUST match the `PRIVATE_DOCS` array in
+the frontend's `Whitepapers.jsx`.
 
-## Phase III — Auth Domain (in progress, 2026-07-13)
+**All 8 private documents are PDF** (converted from `.docx`/`.pptx`
+originals on 2026-07-18, specifically so `Content-Disposition` can be
+`inline` — real in-browser preview — instead of forcing a download; see
+`DocumentController.download()`, which branches on content type). If a
+9th document is ever added as something other than PDF, it will silently
+force-download instead of preview — convert to PDF first, or expect that
+behavior.
 
-- Branch: feature/member-auth-domain in htmadvisory-backend
-- Auth files that were prematurely created by Claude Code are in /tmp/auth-backup/
-  on the development machine — do NOT use these; Phase III chat will rebuild cleanly
-- Do NOT modify WebMvcConfig.java or EnvironmentTokenInterceptor.java until
-  JWT is fully working and tested — those files breaking caused cascading failures
+**GCS layout:** `htmadvisory-whitepapers` (public, uniform bucket-level
+access, `allUsers` granted at the bucket level — the whole bucket is
+public, so nothing private can ever live here) and
+`htmadvisory-whitepapers-private` (no public access; the backend's own
+service account has `roles/storage.objectViewer` on this bucket
+specifically, nothing more). These are two separate buckets, not a
+`public/`+`private/` folder split within one — this project's org policy
+mandates uniform bucket-level access, which makes access control
+bucket-scoped, not folder-scoped. Don't try to reintroduce a folder split.
+
+**Source `.docx`/`.pptx` files** (kept for future edits, since PDFs
+aren't easily re-editable) live in `~/htmadvisory-documents/source/` on
+the maintainer's machine — NOT in either git repo (see below).
+
+## Document & Media Files Don't Belong in Either Git Repo
+
+Whitepapers, source `.docx`/`.pptx`, and similar binary documents were
+found committed in both repos' `whitepapers/` folders (some accidentally
+via `git add -A`, some deliberately) as of 2026-07-18. Removed from both
+and `.gitignore`'d going forward. **The real, canonical location for all
+of these is `~/htmadvisory-documents/` on the maintainer's machine**
+(`public/`, `private/`, `source/` — mirroring the two GCS buckets plus
+editable originals), not either repo. GCS is the actual deployed/backed-up
+copy; git was never adding real value here and every binary commit just
+bloats repo size permanently (rewriting history to remove old commits was
+considered and rejected — not worth the risk to a repo with live CI/CD
+for a few hundred KB).
+
+## Brand Standard — Source of Truth
+
+**The canonical brand assets are 4 SVG files:** `htm-logo-lockup.svg`,
+`htm-logo-lockup-light.svg`, `htm-icon-mark.svg`, `htm-favicon.svg`. The
+frontend already imports the first two directly (see `htmLogo`/
+`htmLogoLight` imports across `src/pages/*.jsx`, pointing at
+`src/assets/branding/`) — **check that folder for the real files before
+ever approximating brand colors from memory or by pattern-matching
+existing documents.** An earlier pass in this project (2026-07-18) built
+a text-only approximation of the wordmark across 8 generated PDFs before
+these source SVGs were available, got the color treatment wrong (solid
+gold instead of two-tone, black background instead of navy, ALL-CAPS
+instead of title case), and had to redo all 8 once the real assets
+surfaced. Don't repeat that — check for the real SVGs first.
+
+**Colors** (from the actual SVG source, not approximated):
+- Gold accent: `#B8935A` — used consistently everywhere, this one was
+  never wrong
+- Dark backdrop: `#0B2942` (navy) — NOT pure black (`#0A0A0A`). Confirmed
+  intentional: the favicon SVG's own comment says `Navy backdrop for
+  contrast at small sizes`, and the icon-mark's gradient bottoms out at
+  this same value
+- Wordmark "HTM" text color is background-dependent — it is a SEPARATE
+  color from "Advisory", never the same solid gold as "Advisory":
+  - On a dark/navy background: "HTM" = `#F4F6F8` (near-white)
+  - On a light/cream background: "HTM" = `#15405A` (navy-teal)
+  - "Advisory" is always `#B8935A` gold, on either background
+- Tagline text (the small line under the wordmark) is also
+  background-dependent: `#9FB0BB` on dark, `#345066` on light
+- Light/cream background fill: `#FAFAF8` (not `#F4F6F8` — that's the
+  dark-background wordmark color above, easy to confuse with the
+  light-background fill color; they are different values used in
+  different roles)
+
+**Text casing:** "HTM Advisory" — title case. NOT "HTM ADVISORY"
+(all-caps was the mistake made in the first, pre-SVG pass).
+
+**Applies to both the live site and any generated document** (whitepaper,
+deck, spec, etc.) — this is one brand system, not a web-specific and a
+document-specific one. Before generating or editing any branded material,
+check `~/htmadvisory/frontend/src/assets/branding/` for the actual current
+SVGs rather than reconstructing colors from what earlier documents happen
+to contain, since earlier documents may themselves be wrong (see above).
+
+## Wordmark-Insertion Bug — Fixed Position Broke Content Slides (2026-07-19)
+
+When adding the brand wordmark to slides that never had one (see Brand
+Standard above), a script inserted it at one fixed position across every
+slide. This broke on content slides where the actual title starts higher
+up than it does on cover slides — the wordmark landed directly on top of
+existing text. Affected `HTM_Advisory_GCP_Deployment_Training.pptx` (6 of
+22 slides) and `modern-backend-engineering.pptx` (all 11 — this deck had
+zero prior branding, so nothing was safe to assume).
+
+**Lesson: when a deck already has SOME correctly-positioned wordmarks
+(inserted by the original human designer), copy that exact position for
+the missing ones — don't invent a new one.** For `GCP_Deployment_Training`,
+15 of 22 slides already had a wordmark at `x=320040 y=164592`; the fix was
+copying that exact position to the other 6, not guessing a new value. Only
+`modern-backend-engineering.pptx` had zero reference slides to copy from —
+there, each slide's actual title position was checked individually before
+picking a compact position guaranteed clear on all 11.
+
+A second bug compounded this: a later pass meant to *fix* text color on
+slides that already had the correct in-place wordmark instead *inserted a
+second, duplicate* wordmark on top, because the fix script's detection
+logic (exact string match) didn't recognize the already-correct text as
+"already handled." Caught by comparing occurrence counts before/after
+across all slides, not by trusting a single spot-check. **When patching
+text across many slides via find/replace, always do a full post-fix sweep
+counting occurrences per slide (not just per-file existence) before
+considering it done — a single duplicated element is easy to miss
+visually but easy to catch by counting.**
+
+## Pre-Existing Content Overflow in GCP Deployment Training (found 2026-07-19)
+
+Independent of the wordmark work above: several slides in
+`HTM_Advisory_GCP_Deployment_Training.pptx` have numbered lists / code
+blocks whose containing box was sized for less content than it actually
+holds — predates any branding edits, a pre-existing authoring defect.
+Found by precise EMU-coordinate math (extracting each shape's `<a:off>`/
+`<a:ext>` and checking for real 2D bounding-box overlap — see method
+below), not by visual inspection, since this session's image-rendering
+tool was intermittently unavailable throughout.
+
+**Fixed:** slide 7 (warning box too short for its wrapped text — resized
+into the small available margin, font 950→750), slide 10 (root cause was
+actually a full-width confirmation banner overlapping and painting over
+an unrelated numbered-list item below it — not a simple undersized box;
+shrunk the banner to fit the one available gap), slide 13 (two stacked
+code boxes plus a short aside squeezed between them, both boxes
+overflowing — resolved by computing all 15 lines' positions
+programmatically against total available vertical space, then
+repositioning each by matching its exact text content, not by position,
+to avoid ambiguity).
+
+**NOT fixed — slide 15:** content genuinely exceeds the physical slide
+boundary by over an inch (extends to y≈6.4M EMU on a 5.14M-EMU-tall
+slide), not just a box border. No font/spacing adjustment fixes this
+without making text illegibly small. **This needs to be split into two
+slides** (deploy command + success output / the 3-step "403 Forbidden"
+fix) — a content-authoring decision, intentionally left for a human to
+make rather than solved by silently restructuring the deck's content.
+
+**Verification method used throughout, given the visual tooling was
+unreliable this session:** extract every shape's exact `<a:off x y>` /
+`<a:ext cx cy>` via regex, compute true 2D bounding-box overlap (not just
+Y-proximity — an early attempt using Y-only comparison produced many
+false positives from full-width header containers that have padding/
+right-alignment baked into a wide, mostly-empty box), and verify by
+counting occurrences before/after any find-replace pass. This is a
+legitimate, trustworthy substitute for visual QA when rendering tools
+aren't available — but the person should still spot-check visually before
+fully trusting it, which happened here before shipping.
+
+## Document Inventory — Confirmed Live (as of 2026-07-19)
+
+All 8 private documents in `gs://htmadvisory-whitepapers-private/` and all
+4 public documents in `gs://htmadvisory-whitepapers/public/` are PDF,
+branded per the Brand Standard above, and verified live via exact
+byte-size match between the local corrected copy and
+`gcloud storage ls -L` output (not just "upload succeeded" — actual
+Content-Length comparison). Source `.docx`/`.pptx` originals live in
+`~/htmadvisory-documents/source/` for future edits. This is the
+first time the full document set has been confirmed end-to-end
+consistent — if a future session finds a document that looks
+off-brand or contains a McKinsey reference, it's a regression from this
+known-good state, not a lingering original issue.
