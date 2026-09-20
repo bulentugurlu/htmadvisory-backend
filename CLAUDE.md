@@ -816,3 +816,83 @@ token briefly exists in the browser, since EmailJS sends are client-side
 and there's no backend email capability in this codebase — a real,
 deliberate architectural tradeoff, not an oversight. HTTPS protects it in
 transit; the token is short-lived (30 min) and single-use.
+
+## Production Outage — 2026-09-20, Unresolved Root Cause (Read Before Panicking Next Time)
+
+Site returned Google's generic "Server Error... try again in 30 seconds"
+page, then later a bare "Rate exceeded." page, both matching Google's own
+infrastructure-level fallback pages rather than anything from this app's
+code. Followed a ~2 month gap with zero deploys or activity on this
+project. **Resolved on its own** after about an hour of investigation,
+with NO code change, redeploy, restart, or credential change made by
+anyone. That matters for how to read everything below: the fix, whatever
+it was, was not something we did.
+
+**Ruled out, with evidence, in this order:**
+- **GCP-wide outage** — checked status.cloud.google.com and third-party
+  aggregators; nothing ongoing, last real incident was Sep 1 (unrelated,
+  different failure mode, already resolved).
+- **Configured Cloud Armor / security policy blocking traffic** —
+  `gcloud compute security-policies list` came back empty.
+- **MongoDB Atlas cluster paused** (the leading hypothesis for most of
+  the investigation, given this project uses a free-tier M0 cluster,
+  which genuinely does auto-pause after inactivity) — ruled out
+  definitively: `mongosh ... --eval 'db.runCommand({ping: 1})'` against
+  the exact same connection string returned `{ ok: 1 }` instantly. A
+  "Monitoring for htmadvisory-dev is paused" banner in the Atlas UI
+  looked alarming but is NOT the same thing as the cluster being paused —
+  it's the monitoring dashboard going idle from lack of dashboard views,
+  and it says so directly ("resumes when you connect to your cluster").
+  Don't re-chase this next time without re-reading this paragraph.
+- **Cloud SQL / Postgres instance stopped** — `gcloud sql instances
+  describe htmadvisory-postgres-dev` showed `RUNNABLE` / `ALWAYS`.
+- **Stale/rotated credentials** (Mongo URI, Postgres URL/user/password,
+  Anthropic key) not matching what's actually in Cloud Run's env —
+  checked directly via `gcloud run services describe ... --format=...env`
+  and compared against what actually worked in the `mongosh` test; all
+  matched exactly what's on file.
+- **A bad deploy causing a crash loop** — this was assumed for a while
+  based on repeated "Starting new instance" log lines every ~30 minutes
+  over 24+ hours. **This assumption was wrong, or at least unconfirmed**:
+  `gcloud run revisions describe` on the current revision showed a
+  completely clean, successful deploy — but from **July 19**, over two
+  months prior, with no sign of ongoing failure in that output. Cloud Run
+  cycles instances for its own maintenance reasons on a perfectly healthy
+  revision; "Starting new instance" log lines alone are NOT proof of a
+  crash loop. Don't assume that again without also finding an actual
+  error/exception in the app's own stdout/stderr logs, not just instance
+  lifecycle messages from the `varlog/system` channel.
+
+**Never confirmed, still genuinely open:**
+- What actually made it start working again. Leading guess, unconfirmed:
+  the "Rate exceeded" message was itself an automatic Google edge-layer
+  throttle (not a configured policy — those were checked and are empty),
+  possibly triggered by the sustained ~30-min instance-cycling pattern
+  looking abnormal from outside, and it lifted on its own after a cooldown
+  window. This fits the timeline (fixed itself with zero intervention)
+  but was never directly verified against any Google-side log or
+  documentation. Treat as a plausible story, not a confirmed mechanism.
+- **What shipped in revisions `00048` through `00053`.** Six Cloud Run
+  deploys exist beyond the last one on record in this doc (`00047`), and
+  `git log --oneline -10` was never actually run/reviewed during this
+  investigation despite being asked for twice. If this happens again,
+  check this FIRST, before re-running the whole elimination chain above —
+  a next session should not have to re-discover that this is still
+  unanswered.
+
+**If this happens again:** don't re-verify GCP-wide status or re-check
+security policies (both cheap to confirm are still fine, but unlikely to
+be it twice). Go straight to: (1) `git log --oneline -10` on the backend
+repo for what actually shipped recently, (2) request-level errors
+specifically (`httpRequest.status>=400` in a `gcloud logging read`
+filter, not instance-lifecycle messages), (3) check
+`htmadvisory-frontend`'s own Cloud Run health and logs too — this
+investigation spent the entire time on the backend service and never
+actually checked whether `htmadvisory.org` even routes through it first
+before assuming that's where the problem lived.
+
+**Also happened during this session, unrelated to the outage itself:**
+the MongoDB Atlas password, Postgres password, and Anthropic API key all
+got pasted into chat again while debugging (same three that were already
+flagged as exposed and unrotated as of the last session). Still not
+rotated as of this writing.
