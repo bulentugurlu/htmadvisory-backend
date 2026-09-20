@@ -896,3 +896,14 @@ the MongoDB Atlas password, Postgres password, and Anthropic API key all
 got pasted into chat again while debugging (same three that were already
 flagged as exposed and unrotated as of the last session). Still not
 rotated as of this writing.
+
+**Update, same day:** `git log --oneline -10` was finally checked. Every
+commit is already-known work from the last session
+(`9f3c0a1`...`a67cca5`) — nothing unrecognized. The "6 unexplained
+deploys" (revision `00047`→`00053`) was never mysterious code: revision
+numbers climb by one per deploy TRIGGER, and last session ended with
+several separate pushes in a row (rate limiting, doc updates, the
+password-reset endpoints, the doc update before that) — each one
+independently kicks off its own deploy via `deploy-dev.yml`. That alone
+fully accounts for the gap. This thread is closed; no further action
+needed here if it comes up again.
